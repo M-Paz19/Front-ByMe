@@ -1,4 +1,18 @@
-export type ApiToken = string;
+export type RegisterRequest = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  address?: string;
+  age?: number;
+  email: string;
+  password: string;
+  confirmPassword: string;
+};
+
+export type LoginRequest = {
+  email: string;
+  password: string;
+};
 
 export type UpdateProfileRequest = {
   firstName?: string;
@@ -8,35 +22,24 @@ export type UpdateProfileRequest = {
   age?: number;
 };
 
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface RegisterRequest {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  address?: string;
-  age?: number;
-  email: string;
-  password: string;
-  confirmPassword: string;
-}
-
-export interface JwtUserPayload {
+export type UserProfileResponse = {
   id?: string;
-  sub?: string; // usually email
+  email?: string;
   firstName?: string;
   lastName?: string;
+  phone?: string;
+  address?: string;
+  age?: number;
   roles?: string[];
-  exp?: number; // seconds
-  iat?: number; // seconds
-}
 
-export interface AuthSession {
-  token: ApiToken;
-  payload?: JwtUserPayload;
-  raw?: unknown;
-}
+  // posibles nombres para foto
+  photoUrl?: string;
+  profilePhotoUrl?: string;
+  avatarUrl?: string;
+  imageUrl?: string;
+  photo?: string;
+  image?: string;
+  url?: string;
 
+  [key: string]: any;
+};

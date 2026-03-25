@@ -1,81 +1,71 @@
 import api from "../api";
 import type {
-  AuthSession,
   LoginRequest,
   RegisterRequest,
+  UpdateProfileRequest,
+  UserProfileResponse,
 } from "./auth.types";
 import { decodeJwtPayload } from "./jwt";
-import type { UpdateProfileRequest } from "./auth.types";
+
+type LoginSession = {
+  token: string;
+  payload: any;
+};
 
 function extractToken(data: any): string | null {
   if (!data) return null;
-  if (typeof data === "string") return data;
 
-  // Common patterns
-  return (
-    data.token ||
-    data.accessToken ||
-    data.access_token ||
-    data.jwt ||
-    data.jwtToken ||
-    data.idToken ||
-    data.tokenJwt ||
-    data?.data?.token ||
-    data?.data?.accessToken ||
-    data?.data?.access_token ||
-    data?.data?.jwt ||
-    data?.data?.jwtToken ||
-    null
-  );
+  if (typeof data === "string") return data;
+  if (typeof data.token === "string") return data.token;
+  if (typeof data.accessToken === "string") return data.accessToken;
+  if (typeof data.access_token === "string") return data.access_token;
+  if (typeof data.jwt === "string") return data.jwt;
+  if (typeof data.jwtToken === "string") return data.jwtToken;
+
+  if (typeof data.data?.token === "string") return data.data.token;
+  if (typeof data.data?.accessToken === "string") return data.data.accessToken;
+
+  return null;
 }
 
 function sanitize<T extends Record<string, any>>(obj: T): Partial<T> {
   return Object.fromEntries(
-    Object.entries(obj).filter(
-      ([, v]) => v !== undefined && v !== null && v !== ""
-    )
+    Object.entries(obj).filter(([, v]) => v !== undefined && v !== null && v !== "")
   ) as Partial<T>;
 }
 
 export class AuthService {
-  /** POST /login */
-  static async login(payload: LoginRequest): Promise<AuthSession> {
-    const res = await api.post("/login", payload, {
+  static async register(data: RegisterRequest): Promise<void> {
+    await api.post("/register", data);
+  }
+
+  static async login(data: LoginRequest): Promise<LoginSession> {
+    const res = await api.post("/login", data, {
       headers: { "Content-Type": "application/json" },
     });
 
     const token = extractToken(res.data);
     if (!token) {
-      throw new Error(
-        "Login exitoso, pero el backend no devolvió un token. Revisa la respuesta de /login."
-      );
+      throw new Error("No se encontró token en la respuesta de /login.");
     }
 
-    return {
-      token,
-      payload: decodeJwtPayload(token),
-      raw: res.data,
-    };
+    const payload = decodeJwtPayload(token);
+    return { token, payload };
   }
 
-  /** POST /register */
-  static async register(payload: RegisterRequest): Promise<unknown> {
-    const res = await api.post("/register", payload, {
-      headers: { "Content-Type": "application/json" },
-    });
-    return res.data;
-  }
-
-  /** POST /logout (requires Bearer token) */
   static async logout(): Promise<void> {
     await api.post("/logout");
   }
 
-  
-  static async updateProfile(
+  static async getProfile() {
+  const res = await api.get("/profile");
+  return res.data;
+}
+
+static async updateProfile(
   request: UpdateProfileRequest,
   file?: File | null
-): Promise<unknown> {
+): Promise<UserProfileResponse> {
   const cleaned = sanitize({
     firstName: request.firstName,
     lastName: request.lastName,
@@ -86,20 +76,24 @@ export class AuthService {
 
   const form = new FormData();
 
-
-  form.append(
-    "request",
-    new Blob([JSON.stringify(cleaned)], { type: "application/json" })
+  const jsonFile = new File(
+    [JSON.stringify(cleaned)],
+    "request.json",
+    { type: "application/json" }
   );
+  form.append("request", jsonFile);
 
   if (file) {
     form.append("file", file, file.name);
   }
 
-  const res = await api.put("/profile", form, {
+  const res = await api.put("/update-profile", form, {
     headers: { Accept: "application/json" },
   });
 
-  return res.data;
+  return res.data as UserProfileResponse;
 }
+
+  
+
 }

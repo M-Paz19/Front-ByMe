@@ -4,6 +4,8 @@ import { Eye, EyeOff, Wrench, Mail, Lock, User, Phone, Briefcase, ChevronRight, 
 import { useApp } from '../context/AppContext';
 import { IMGS } from '../data/mockData';
 import { decodeJwtPayload, mapRolesToAppRole } from '../../services/auth/jwt';
+import { useEffect } from "react";
+
 
 type AuthView = 'login' | 'register-user' | 'register-pro';
 
@@ -14,6 +16,19 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
   const { login, register, authLoading, authError } = useApp();
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const { isLoggedIn, role } = useApp();
+    useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const path =
+      role === "admin"
+        ? "/panel/admin"
+        : role === "profesional"
+        ? "/panel/profesional"
+        : "/panel/usuario";
+
+  navigate(path, { replace: true });
+}, [isLoggedIn, role, navigate]);
 
   const goToDashboard = () => {
     const token = localStorage.getItem('token');
@@ -35,7 +50,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
       await login(email, password);
       goToDashboard();
     } catch {
-      // error is shown via authError
     }
   };
 
@@ -82,7 +96,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
       });
       goToDashboard();
     } catch {
-      // error is shown via authError
     }
   };
 
@@ -117,7 +130,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
     const address = addressRaw || undefined;
 
     try {
-      // NOTE: Postman collection only exposes /register (no separate pro endpoint)
       await register({
         firstName: String(form.get('firstName') || '').trim(),
         lastName: String(form.get('lastName') || '').trim(),
@@ -130,7 +142,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
       });
       goToDashboard();
     } catch {
-      // error is shown via authError
     }
   };
 

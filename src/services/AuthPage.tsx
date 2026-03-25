@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { login } from "../../services/authService";
+import { login } from "../services/Authservice";
 
 export function AuthPage() {
   const [email, setEmail] = useState("");
@@ -11,7 +11,6 @@ export function AuthPage() {
 
       console.log("LOGIN OK:", res.data);
 
-      // 🔐 Guardar token
       localStorage.setItem("token", res.data.token);
 
     } catch (error) {
