@@ -1,14 +1,31 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import {
   Search, MapPin, Star, ChevronRight, Shield, Clock, ThumbsUp, Wrench,
   Droplets, Zap, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck,
   Paintbrush2, Bug, ArrowRight, CheckCircle2, Users, Briefcase, Award
 } from 'lucide-react';
-import { categories, professionals, IMGS } from '../data/mockData';
+import { categories as mockCategories, professionals, IMGS } from '../data/mockData';
+import { ProfessionalsService } from '../../services/professionals/professionals.service';
+import type { CategoryName } from '../../services/professionals/professionals.types';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck, Bug,
+};
+
+// Mapa visual por nombre de categoría para asignar iconos y colores
+const CATEGORY_VISUAL: Record<string, { iconName: string; color: string; bgColor: string }> = {
+  'Plomería':       { iconName: 'Droplets',    color: '#1E40AF', bgColor: '#EFF6FF' },
+  'Electricidad':   { iconName: 'Zap',         color: '#D97706', bgColor: '#FFFBEB' },
+  'Pintura':        { iconName: 'Paintbrush2', color: '#7C3AED', bgColor: '#F5F3FF' },
+  'Carpintería':    { iconName: 'Hammer',      color: '#92400E', bgColor: '#FEF3C7' },
+  'Limpieza':       { iconName: 'Sparkles',    color: '#10B981', bgColor: '#ECFDF5' },
+  'Cerrajería':     { iconName: 'KeyRound',    color: '#0F766E', bgColor: '#F0FDFA' },
+  'Jardinería':     { iconName: 'Leaf',        color: '#15803D', bgColor: '#F0FDF4' },
+  'Climatización':  { iconName: 'Wind',        color: '#0369A1', bgColor: '#F0F9FF' },
+  'Mudanzas':       { iconName: 'Truck',       color: '#9333EA', bgColor: '#FAF5FF' },
+  'Fumigación':     { iconName: 'Bug',         color: '#BE185D', bgColor: '#FDF2F8' },
+  'Tecnología':     { iconName: 'Zap',         color: '#6366F1', bgColor: '#EEF2FF' },
 };
 
 const STATS = [
@@ -49,6 +66,31 @@ export function Landing() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [location, setLocation] = useState('Popayán, Cauca');
+
+  // Categorías: inicia con mock, reemplaza con datos del API
+  const [categories, setCategories] = useState(mockCategories);
+
+  useEffect(() => {
+    let mounted = true;
+    ProfessionalsService.getCategoriesNames()
+      .then((apiCats) => {
+        if (!mounted || apiCats.length === 0) return;
+        const mapped = apiCats.map((c) => {
+          const vis = CATEGORY_VISUAL[c.name] || { iconName: 'Wrench', color: '#6B7280', bgColor: '#F3F4F6' };
+          return {
+            id: c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-'),
+            name: c.name,
+            iconName: vis.iconName,
+            color: vis.color,
+            bgColor: vis.bgColor,
+            count: 0,
+          };
+        });
+        setCategories(mapped);
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,13 +163,13 @@ export function Landing() {
 
             {/* Quick categories */}
             <div className="flex flex-wrap gap-2 mt-5">
-              {['Plomería', 'Electricidad', 'Pintura', 'Limpieza', 'Carpintería'].map(cat => (
+              {categories.slice(0, 5).map(cat => (
                 <button
-                  key={cat}
-                  onClick={() => navigate(`/buscar?cat=${cat.toLowerCase()}`)}
+                  key={cat.id}
+                  onClick={() => navigate(`/buscar?cat=${cat.id}`)}
                   className="px-3 py-1.5 bg-white/10 backdrop-blur-sm text-white/90 rounded-full text-sm border border-white/20 hover:bg-white/20 transition-colors"
                 >
-                  {cat}
+                  {cat.name}
                 </button>
               ))}
             </div>
@@ -207,7 +249,9 @@ export function Landing() {
                   <Icon className="w-6 h-6" style={{ color: cat.color }} />
                 </div>
                 <p className="text-sm font-semibold text-[#111827]">{cat.name}</p>
-                <p className="text-xs text-[#9CA3AF] mt-0.5">{cat.count} profesionales</p>
+                {cat.count > 0 && (
+                  <p className="text-xs text-[#9CA3AF] mt-0.5">{cat.count} profesionales</p>
+                )}
               </Link>
             );
           })}

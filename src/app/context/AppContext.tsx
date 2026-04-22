@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { IMGS } from "../data/mockData";
 import { AuthService } from "../../services/auth/auth.service";
+import { ProfessionalsService } from "../../services/professionals/professionals.service";
 import type { RegisterRequest, UpdateProfileRequest, UserProfileResponse } from "../../services/auth/auth.types";
 import { clearToken, getToken, setToken } from "../../services/auth/storage";
 import { decodeJwtPayload, isJwtExpired, mapRolesToAppRole } from "../../services/auth/jwt";
@@ -35,6 +36,7 @@ interface AppContextType {
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: UpdateProfileRequest, file?: File | null) => Promise<void>;
+  becomeProfessional: (professionId: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -53,6 +55,7 @@ const AppContext = createContext<AppContextType>({
   register: async () => {},
   logout: async () => {},
   updateProfile: async () => {},
+  becomeProfessional: async () => {},
 });
 
 const ROLE_DATA: Record<DemoRole, { userName: string; userPhoto: string }> = {
@@ -68,6 +71,14 @@ function extractApiErrorMessage(err: any, fallback: string): string {
   const data = err?.response?.data;
   if (!data) return err?.message || fallback;
   if (typeof data === "string") return data;
+
+  if (data.fieldErrors && typeof data.fieldErrors === "object") {
+    const msgs = Object.entries(data.fieldErrors)
+      .map(([field, msg]) => `${msg}`)
+      .join("\n");
+    if (msgs) return msgs;
+  }
+
   if (typeof data?.message === "string") return data.message;
   if (typeof data?.error === "string") return data.error;
   return fallback;
@@ -81,7 +92,6 @@ function withCacheBuster(url: string) {
 function extractPhotoUrl(profile: any): string | null {
   if (!profile || typeof profile !== "object") return null;
 
-  // nombres típicos
   const direct = [
     profile.profilePictureUrl,
     profile.photoUrl,
@@ -177,6 +187,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setUser((prev) => mapUserFromProfile(profile, prev));
 
+        // Sincronizar el role del contexto con los roles del profile
+        if (profile.roles && Array.isArray(profile.roles)) {
+          setRole(mapRolesToAppRole(profile.roles));
+        }
+
         const photo = extractPhotoUrl(profile);
         if (photo) {
           const busted = withCacheBuster(photo);
@@ -256,7 +271,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-    const updateProfile = async (data: UpdateProfileRequest, file?: File | null) => {
+  const updateProfile = async (data: UpdateProfileRequest, file?: File | null) => {
     setAuthLoading(true);
     setAuthError(null);
 
@@ -288,6 +303,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const becomeProfessional = async (professionId: string) => {
+    setAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      const res = await ProfessionalsService.createProfessionalProfile({ professionId });
+
+      // El endpoint devuelve un nuevo token con rol PROFESSIONAL
+      const newToken = res.token;
+      if (newToken) {
+        setToken(newToken);
+        setTokenState(newToken);
+
+        const payload = decodeJwtPayload(newToken);
+        setRole(mapRolesToAppRole(payload?.roles));
+
+        setUser((prev) => ({
+          ...prev,
+          id: payload?.id ?? prev?.id,
+          email: payload?.sub ?? prev?.email,
+          firstName: payload?.firstName ?? prev?.firstName,
+          lastName: payload?.lastName ?? prev?.lastName,
+          roles: payload?.roles ?? prev?.roles,
+        }));
+      }
+    } catch (err: any) {
+      setAuthError(extractApiErrorMessage(err, "No se pudo crear el perfil profesional."));
+      throw err;
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -306,6 +354,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         register,
         logout,
         updateProfile,
+        becomeProfessional,
       }}
     >
       {children}

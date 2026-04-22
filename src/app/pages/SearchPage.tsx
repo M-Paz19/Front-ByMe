@@ -1,15 +1,31 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
   Search, MapPin, Star, SlidersHorizontal, X, Map,
   List, Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound,
-  Leaf, Wind, Truck, Bug, Clock, Award
+  Leaf, Wind, Truck, Bug, Clock, Award, Wrench
 } from 'lucide-react';
-import { professionals, categories } from '../data/mockData';
+import { professionals, categories as mockCategories } from '../data/mockData';
 import { MockMap } from '../components/MockMap';
+import { ProfessionalsService } from '../../services/professionals/professionals.service';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck, Bug,
+};
+
+// Mapa visual por nombre de categoría (mismo que Landing)
+const CATEGORY_VISUAL: Record<string, { iconName: string; color: string; bgColor: string }> = {
+  'Plomería':       { iconName: 'Droplets',    color: '#1E40AF', bgColor: '#EFF6FF' },
+  'Electricidad':   { iconName: 'Zap',         color: '#D97706', bgColor: '#FFFBEB' },
+  'Pintura':        { iconName: 'Paintbrush2', color: '#7C3AED', bgColor: '#F5F3FF' },
+  'Carpintería':    { iconName: 'Hammer',      color: '#92400E', bgColor: '#FEF3C7' },
+  'Limpieza':       { iconName: 'Sparkles',    color: '#10B981', bgColor: '#ECFDF5' },
+  'Cerrajería':     { iconName: 'KeyRound',    color: '#0F766E', bgColor: '#F0FDFA' },
+  'Jardinería':     { iconName: 'Leaf',        color: '#15803D', bgColor: '#F0FDF4' },
+  'Climatización':  { iconName: 'Wind',        color: '#0369A1', bgColor: '#F0F9FF' },
+  'Mudanzas':       { iconName: 'Truck',       color: '#9333EA', bgColor: '#FAF5FF' },
+  'Fumigación':     { iconName: 'Bug',         color: '#BE185D', bgColor: '#FDF2F8' },
+  'Tecnología':     { iconName: 'Zap',         color: '#6366F1', bgColor: '#EEF2FF' },
 };
 
 const SORT_OPTIONS = ['Relevancia', 'Mejor calificación', 'Más cercano', 'Menor precio', 'Más reseñas'];
@@ -25,6 +41,31 @@ export function SearchPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
   const [filterOpen, setFilterOpen] = useState(false);
+
+  // Categorías: inicia con mock, reemplaza con datos del API
+  const [categories, setCategories] = useState(mockCategories);
+
+  useEffect(() => {
+    let mounted = true;
+    ProfessionalsService.getCategoriesNames()
+      .then((apiCats) => {
+        if (!mounted || apiCats.length === 0) return;
+        const mapped = apiCats.map((c) => {
+          const vis = CATEGORY_VISUAL[c.name] || { iconName: 'Wrench', color: '#6B7280', bgColor: '#F3F4F6' };
+          return {
+            id: c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-'),
+            name: c.name,
+            iconName: vis.iconName,
+            color: vis.color,
+            bgColor: vis.bgColor,
+            count: 0,
+          };
+        });
+        setCategories(mapped);
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
 
   const filtered = useMemo(() => {
     return professionals.filter(p => {
@@ -138,7 +179,7 @@ export function SearchPage() {
                 Todos
               </button>
               {categories.map(cat => {
-                const Icon = CATEGORY_ICONS[cat.iconName];
+                const Icon = CATEGORY_ICONS[cat.iconName] || Wrench;
                 return (
                   <button
                     key={cat.id}
@@ -147,7 +188,7 @@ export function SearchPage() {
                       selectedCat === cat.id ? 'bg-[#1E40AF] text-white' : 'bg-[#F3F4F6] text-[#374151] hover:bg-[#E5E7EB]'
                     }`}
                   >
-                    {Icon && <Icon className="w-3.5 h-3.5" />}
+                    <Icon className="w-3.5 h-3.5" />
                     {cat.name}
                   </button>
                 );

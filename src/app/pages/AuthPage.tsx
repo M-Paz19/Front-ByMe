@@ -4,21 +4,58 @@ import { Eye, EyeOff, Wrench, Mail, Lock, User, Phone, Briefcase, ChevronRight, 
 import { useApp } from '../context/AppContext';
 import { IMGS } from '../data/mockData';
 import { decodeJwtPayload, mapRolesToAppRole } from '../../services/auth/jwt';
+import { ProfessionalsService } from '../../services/professionals/professionals.service';
+import type { ProfessionName } from '../../services/professionals/professionals.types';
 import { useEffect } from "react";
 
 
 type AuthView = 'login' | 'register-user' | 'register-pro';
 
+function extractErrorMsg(err: any): string | null {
+  const data = err?.response?.data;
+  if (!data) return err?.message || null;
+  if (typeof data === 'string') return data;
+  // fieldErrors del backend (validaciones de campos)
+  if (data.fieldErrors && typeof data.fieldErrors === 'object') {
+    const msgs = Object.values(data.fieldErrors).filter(Boolean).join('\n');
+    if (msgs) return msgs;
+  }
+  if (typeof data.message === 'string') return data.message;
+  if (typeof data.error === 'string') return data.error;
+  return err?.message || null;
+}
+
 export function AuthPage({ initialView }: { initialView?: AuthView }) {
   const [view, setView] = useState<AuthView>(initialView || 'login');
   const [showPass, setShowPass] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const { login, register, authLoading, authError } = useApp();
+  const { login, register, becomeProfessional, authLoading, authError } = useApp();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { isLoggedIn, role } = useApp();
+
+  // Registro profesional en 2 pasos
+  const [proStep, setProStep] = useState<'form' | 'select-profession'>('form');
+
+  // Profesiones desde el API (se cargan en paso 2, cuando ya hay token)
+  const [professions, setProfessions] = useState<ProfessionName[]>([]);
+  const [professionsLoading, setProfessionsLoading] = useState(false);
+
+  useEffect(() => {
+    if (proStep !== 'select-profession') return;
+    let mounted = true;
+    setProfessionsLoading(true);
+    ProfessionalsService.getProfessionsNames()
+      .then((list) => { if (mounted) setProfessions(list); })
+      .catch(() => { if (mounted) setFormError('No se pudieron cargar las profesiones. Intenta de nuevo.'); })
+      .finally(() => { if (mounted) setProfessionsLoading(false); });
+    return () => { mounted = false; };
+  }, [proStep]);
     useEffect(() => {
     if (!isLoggedIn) return;
+
+    // No redirigir si estamos en el paso 2 del registro profesional
+    if (view === 'register-pro' && proStep === 'select-profession') return;
 
     const path =
       role === "admin"
@@ -28,7 +65,7 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
         : "/panel/usuario";
 
   navigate(path, { replace: true });
-}, [isLoggedIn, role, navigate]);
+}, [isLoggedIn, role, navigate, view, proStep]);
 
   const goToDashboard = () => {
     const token = localStorage.getItem('token');
@@ -49,9 +86,13 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
     try {
       await login(email, password);
       goToDashboard();
-    } catch {
+    } catch (err: any) {
+      const msg = extractErrorMsg(err);
+      if (msg && !authError) setFormError(msg);
     }
   };
+
+  
 
   const handleRegisterUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -71,11 +112,11 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
     if (ageRaw) {
       const n = Number(ageRaw);
       if (Number.isNaN(n)) {
-        setFormError('La edad debe ser un n00famero.');
+        setFormError('La edad debe ser un número.');
         return;
       }
       if (n < 18) {
-        setFormError('Debes ser mayor de 18 a00f1os.');
+        setFormError('Debes ser mayor de 18 años.');
         return;
       }
       age = n;
@@ -95,10 +136,13 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
         confirmPassword,
       });
       goToDashboard();
-    } catch {
+    } catch (err: any) {
+      const msg = extractErrorMsg(err);
+      if (msg && !authError) setFormError(msg);
     }
   };
 
+  // Paso 1: Solo registrar usuario
   const handleRegisterPro = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setFormError(null);
@@ -117,11 +161,11 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
     if (ageRaw) {
       const n = Number(ageRaw);
       if (Number.isNaN(n)) {
-        setFormError('La edad debe ser un n00famero.');
+        setFormError('La edad debe ser un número.');
         return;
       }
       if (n < 18) {
-        setFormError('Debes ser mayor de 18 a00f1os.');
+        setFormError('Debes ser mayor de 18 años.');
         return;
       }
       age = n;
@@ -140,6 +184,29 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
         password,
         confirmPassword,
       });
+
+      // Registro exitoso → pasar al paso 2 (ahora ya tenemos token)
+      setProStep('select-profession');
+    } catch (err: any) {
+      const msg = extractErrorMsg(err);
+      if (msg && !authError) setFormError(msg);
+    }
+  };
+
+  // Paso 2: Seleccionar profesión y crear perfil profesional
+  const handleSelectProfession = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setFormError(null);
+    const form = new FormData(e.currentTarget);
+    const professionId = String(form.get('professionId') || '').trim();
+
+    if (!professionId) {
+      setFormError('Selecciona una profesión.');
+      return;
+    }
+
+    try {
+      await becomeProfessional(professionId);
       goToDashboard();
     } catch {
     }
@@ -397,10 +464,20 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
                 <div className="inline-flex items-center gap-2 bg-[#ECFDF5] text-[#10B981] text-xs font-semibold px-3 py-1 rounded-full mb-3">
                   <Briefcase className="w-3.5 h-3.5" /> Cuenta Profesional
                 </div>
-                <h1 className="text-2xl font-bold text-[#111827]">Únete como profesional</h1>
-                <p className="text-[#6B7280] mt-1">Expande tu negocio en Popayán</p>
+                <h1 className="text-2xl font-bold text-[#111827]">
+                  {proStep === 'form' ? 'Únete como profesional' : 'Selecciona tu profesión'}
+                </h1>
+                <p className="text-[#6B7280] mt-1">
+                  {proStep === 'form'
+                    ? 'Paso 1 de 2 — Crea tu cuenta'
+                    : 'Paso 2 de 2 — Elige tu especialidad'}
+                </p>
               </div>
-              <form onSubmit={handleRegisterPro} className="space-y-4">
+
+              {/* ── PASO 1: Formulario de registro ── */}
+              {proStep === 'form' && (
+                <>
+                  <form onSubmit={handleRegisterPro} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-[#374151] mb-1.5">Nombre</label>
@@ -434,29 +511,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
                   <input name="age" type="number" min={1} max={120} placeholder="30" className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Especialidad principal</label>
-                  <select className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] bg-white transition-all">
-                    <option value="">Selecciona tu especialidad</option>
-                    <option>Plomería</option>
-                    <option>Electricidad</option>
-                    <option>Pintura</option>
-                    <option>Carpintería</option>
-                    <option>Limpieza</option>
-                    <option>Cerrajería</option>
-                    <option>Jardinería</option>
-                    <option>Climatización</option>
-                    <option>Mudanzas</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Descripción breve</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Cuéntanos sobre tu experiencia..."
-                    className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] resize-none transition-all"
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-medium text-[#374151] mb-1.5">Contraseña</label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
@@ -478,9 +532,48 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
                   disabled={authLoading}
                   className="w-full bg-[#10B981] hover:bg-[#0EA875] text-white py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70"
                 >
-                  {authLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Crear cuenta profesional <ChevronRight className="w-4 h-4" /></>}
+                  {authLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Continuar <ChevronRight className="w-4 h-4" /></>}
                 </button>
               </form>
+              <p className="text-center text-sm text-[#6B7280] mt-5">
+                ¿Ya tienes cuenta?{' '}
+                <button onClick={() => setView('login')} className="text-[#1E40AF] font-medium hover:underline">Iniciar sesión</button>
+              </p>
+                </>
+              )}
+
+              {/* ── PASO 2: Seleccionar profesión ── */}
+              {proStep === 'select-profession' && (
+                <>
+                  <div className="p-4 bg-[#ECFDF5] rounded-xl border border-[#10B981]/20 mb-5">
+                    <p className="text-sm text-[#10B981] flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" /> Cuenta creada exitosamente. Ahora selecciona tu profesión.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSelectProfession} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Especialidad principal</label>
+                      <select name="professionId" required className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] bg-white transition-all">
+                        <option value="">
+                          {professionsLoading ? 'Cargando profesiones...' : 'Selecciona tu especialidad'}
+                        </option>
+                        {professions.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={authLoading || professionsLoading}
+                      className="w-full bg-[#10B981] hover:bg-[#0EA875] text-white py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                    >
+                      {authLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Crear cuenta profesional <ChevronRight className="w-4 h-4" /></>}
+                    </button>
+                  </form>
+                </>
+              )}
+
               {authError && (
                 <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                   {authError}
@@ -491,10 +584,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
                   {formError}
                 </div>
               )}
-              <p className="text-center text-sm text-[#6B7280] mt-5">
-                ¿Ya tienes cuenta?{' '}
-                <button onClick={() => setView('login')} className="text-[#1E40AF] font-medium hover:underline">Iniciar sesión</button>
-              </p>
             </>
           )}
         </div>
