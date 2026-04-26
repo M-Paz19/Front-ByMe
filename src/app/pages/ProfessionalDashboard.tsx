@@ -10,6 +10,7 @@ import { professionals, proBookingRequests } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 import type { ServiceDetailDTO } from '../../services/professionals/professionals.types';
+import { GoogleMapPicker } from '../components/GoogleMapPicker';
 
 type View = 'overview' | 'solicitudes' | 'servicios' | 'disponibilidad' | 'perfil';
 
@@ -733,16 +734,13 @@ export function ProfessionalDashboard() {
                         />
                       </div>
                       <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Dirección</label>
-                        <div className="relative">
-                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
-                          <input
-                            name="address"
-                            type="text"
-                            defaultValue={user?.address || ''}
-                            className="w-full pl-9 pr-4 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
-                          />
-                        </div>
+                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Dirección de trabajo</label>
+                        {/*
+                          GoogleMapPicker renderiza internamente un <input type="hidden" name="address">
+                          que el FormData del <form> de abajo leerá automáticamente,
+                          manteniendo el comportamiento original del submit.
+                        */}
+                        <GoogleMapPicker defaultAddress={user?.address || ''} />
                       </div>
                     </div>
 

@@ -6,7 +6,7 @@ import {
   Leaf, Wind, Truck, Bug, Clock, Award, Wrench
 } from 'lucide-react';
 import { professionals, categories as mockCategories } from '../data/mockData';
-import { MockMap } from '../components/MockMap';
+import { RealMap } from '../components/RealMap';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -357,7 +357,7 @@ export function SearchPage() {
 
         {/* Right: Map */}
         <div className={`flex-1 relative ${mobileView === 'list' ? 'hidden lg:block' : 'block'}`}>
-          <MockMap
+          <RealMap
             professionals={filtered}
             selectedId={selectedId}
             onSelect={id => setSelectedId(selectedId === id ? null : id)}
