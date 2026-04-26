@@ -1,28 +1,168 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
   LayoutDashboard, Briefcase, Calendar, Settings, LogOut, Star,
   CheckCircle2, XCircle, AlertCircle, Clock, MapPin, ChevronRight,
-  Plus, Edit3, Trash2, Save, Phone,
-  Users, X
+  Plus, Edit3, Trash2, Save, Phone, Users, X, Send, Truck, PlayCircle, RefreshCw
 } from 'lucide-react';
-import { professionals, proBookingRequests } from '../data/mockData';
+import { professionals } from '../data/mockData';
+import { ServiceRequestsService } from '../../services/requests/requests.service';
 import { useApp } from '../context/AppContext';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 import type { ServiceDetailDTO } from '../../services/professionals/professionals.types';
+import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/requests.types';
 
 type View = 'overview' | 'solicitudes' | 'servicios' | 'disponibilidad' | 'perfil';
 
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const HOURS = ['7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'];
 
+// Config visual para los 8 estados del backend
+const STATUS_CONFIG: Record<RequestStatus, {
+  label: string;
+  icon: any;
+  color: string;
+  bg: string;
+}> = {
+  PENDIENTE:  { label: 'Pendiente',    icon: AlertCircle,  color: 'text-[#D97706]', bg: 'bg-[#FFFBEB]' },
+  ACEPTADA:   { label: 'Aceptada',     icon: Send,         color: 'text-[#1E40AF]', bg: 'bg-[#EFF6FF]' },
+  CONFIRMADA: { label: 'Confirmada',   icon: CheckCircle2, color: 'text-[#10B981]', bg: 'bg-[#ECFDF5]' },
+  EN_CAMINO:  { label: 'En camino',    icon: Truck,        color: 'text-[#7C3AED]', bg: 'bg-[#F5F3FF]' },
+  EN_PROCESO: { label: 'En proceso',   icon: PlayCircle,   color: 'text-[#0369A1]', bg: 'bg-[#F0F9FF]' },
+  COMPLETADA: { label: 'Completada',   icon: CheckCircle2, color: 'text-[#6B7280]', bg: 'bg-[#F3F4F6]' },
+  RECHAZADA:  { label: 'Rechazada',    icon: XCircle,      color: 'text-[#EF4444]', bg: 'bg-[#FEF2F2]' },
+  CANCELADA:  { label: 'Cancelada',    icon: XCircle,      color: 'text-[#6B7280]', bg: 'bg-[#F3F4F6]' },
+};
+
 function getApiMsg(err: any): string {
   const data = err?.response?.data;
   if (!data) return err?.message || 'Ocurrió un error inesperado.';
   if (typeof data === 'string') return data;
+  if (data.fieldErrors && typeof data.fieldErrors === 'object') {
+    const msgs = Object.values(data.fieldErrors).filter(Boolean).join('\n');
+    if (msgs) return msgs;
+  }
   if (typeof data?.message === 'string') return data.message;
   if (typeof data?.error === 'string') return data.error;
   return 'Ocurrió un error inesperado.';
+}
+
+function formatPrice(v: number | null | undefined): string {
+  if (typeof v !== 'number') return '—';
+  return `$${v.toLocaleString()}`;
+}
+
+/** Modal para aceptar solicitud: pide horario de inicio y fin */
+function AcceptModal(props: {
+  open: boolean;
+  loading: boolean;
+  onClose: () => void;
+  onSubmit: (startTime: string, endTime: string) => void;
+}) {
+  const { open, loading, onClose, onSubmit } = props;
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('10:00');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setStartTime('08:00');
+      setEndTime('10:00');
+      setError(null);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const submit = () => {
+    setError(null);
+    if (!startTime || !endTime) {
+      setError('Debes ingresar hora de inicio y fin.');
+      return;
+    }
+    if (endTime <= startTime) {
+      setError('La hora de fin debe ser posterior a la hora de inicio.');
+      return;
+    }
+    // Convertir HH:MM → HH:MM:SS
+    onSubmit(`${startTime}:00`, `${endTime}:00`);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-[#E5E7EB] shadow-lg overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E7EB]">
+            <div>
+              <h2 className="text-base font-bold text-[#111827]">Aceptar solicitud</h2>
+              <p className="text-xs text-[#6B7280] mt-0.5">Propone el horario para el servicio.</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-[#F3F4F6] transition-colors"
+              aria-label="Cerrar"
+            >
+              <X className="w-4 h-4 text-[#6B7280]" />
+            </button>
+          </div>
+
+          <div className="px-5 py-5 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1.5">Hora de inicio</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1.5">Hora de fin</label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
+                />
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                {error}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-4 py-2.5 rounded-xl border border-[#E5E7EB] text-sm font-semibold text-[#374151] hover:bg-[#F9FAFB] transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={loading}
+                className="inline-flex items-center gap-2 bg-[#10B981] hover:bg-[#0EA875] text-white px-4 py-2.5 rounded-xl font-semibold transition-all disabled:opacity-70"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <><CheckCircle2 className="w-4 h-4" /> Aceptar solicitud</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ServiceModal(props: {
@@ -80,9 +220,7 @@ function ServiceModal(props: {
               <h2 className="text-base font-bold text-[#111827]">
                 {mode === 'create' ? 'Añadir servicio' : 'Editar servicio'}
               </h2>
-              <p className="text-xs text-[#6B7280] mt-0.5">
-                Completa los datos del servicio.
-              </p>
+              <p className="text-xs text-[#6B7280] mt-0.5">Completa los datos del servicio.</p>
             </div>
             <button
               type="button"
@@ -156,7 +294,6 @@ function ServiceModal(props: {
               >
                 Cancelar
               </button>
-
               <button
                 type="button"
                 onClick={submit}
@@ -166,9 +303,7 @@ function ServiceModal(props: {
                 {loading ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <>
-                    <Save className="w-4 h-4" /> Guardar
-                  </>
+                  <><Save className="w-4 h-4" /> Guardar</>
                 )}
               </button>
             </div>
@@ -181,7 +316,6 @@ function ServiceModal(props: {
 
 export function ProfessionalDashboard() {
   const [view, setView] = useState<View>('overview');
-  const [requests, setRequests] = useState(proBookingRequests);
   const [availability, setAvailability] = useState<Record<string, string[]>>({
     Lunes: ['8:00 AM', '9:00 AM', '10:00 AM', '2:00 PM', '3:00 PM'],
     Martes: ['8:00 AM', '9:00 AM', '10:00 AM'],
@@ -198,10 +332,9 @@ export function ProfessionalDashboard() {
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  // === Servicios (API) ===
-  // El backend ahora devuelve el professionalId como user.id cuando el rol es PROFESSIONAL
   const professionalId = user?.id as string | undefined;
 
+  // === Servicios (API) ===
   const [services, setServices] = useState<ServiceDetailDTO[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
@@ -278,11 +411,98 @@ export function ProfessionalDashboard() {
     }
   };
 
-  // === resto de lógica visual (mock) ===
-  const handleStatus = (id: string, status: 'confirmed' | 'cancelled') => {
-    setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+  // === Solicitudes (API real) ===
+  const [requests, setRequests] = useState<ServiceRequestDTO[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [requestsError, setRequestsError] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  const [acceptModalOpen, setAcceptModalOpen] = useState(false);
+  const [acceptingRequestId, setAcceptingRequestId] = useState<string | null>(null);
+  const [acceptLoading, setAcceptLoading] = useState(false);
+
+  const loadRequests = async () => {
+    if (!professionalId) return;
+    setRequestsLoading(true);
+    setRequestsError(null);
+    try {
+      const list = await ServiceRequestsService.getByProfessional(professionalId);
+      setRequests(list);
+    } catch (e: any) {
+      setRequestsError(getApiMsg(e));
+    } finally {
+      setRequestsLoading(false);
+    }
   };
 
+  // Cargar solicitudes al montar y al entrar a "solicitudes" u "overview"
+  useEffect(() => {
+    if (view === 'solicitudes' || view === 'overview') {
+      void loadRequests();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, professionalId]);
+
+  const pendingRequests = useMemo(
+    () => requests.filter(r => r.status === 'PENDIENTE'),
+    [requests]
+  );
+
+  const openAcceptModal = (requestId: string) => {
+    setAcceptingRequestId(requestId);
+    setAcceptModalOpen(true);
+  };
+
+  const handleAccept = async (startTime: string, endTime: string) => {
+    if (!acceptingRequestId) return;
+    setAcceptLoading(true);
+    setRequestsError(null);
+    try {
+      const updated = await ServiceRequestsService.accept(acceptingRequestId, {
+        proposedStartTime: startTime,
+        proposedEndTime: endTime,
+      });
+      setRequests(prev => prev.map(r => r.id === acceptingRequestId ? updated : r));
+      setAcceptModalOpen(false);
+      setAcceptingRequestId(null);
+    } catch (e: any) {
+      setRequestsError(getApiMsg(e));
+    } finally {
+      setAcceptLoading(false);
+    }
+  };
+
+  const handleReject = async (requestId: string) => {
+    const ok = window.confirm('¿Seguro que deseas rechazar esta solicitud?');
+    if (!ok) return;
+    setActionLoadingId(requestId);
+    setRequestsError(null);
+    try {
+      const updated = await ServiceRequestsService.reject(requestId);
+      setRequests(prev => prev.map(r => r.id === requestId ? updated : r));
+    } catch (e: any) {
+      setRequestsError(getApiMsg(e));
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleCancelReq = async (requestId: string) => {
+    const ok = window.confirm('¿Seguro que deseas cancelar esta solicitud?');
+    if (!ok) return;
+    setActionLoadingId(requestId);
+    setRequestsError(null);
+    try {
+      const updated = await ServiceRequestsService.cancel(requestId);
+      setRequests(prev => prev.map(r => r.id === requestId ? updated : r));
+    } catch (e: any) {
+      setRequestsError(getApiMsg(e));
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // === Disponibilidad (mock por ahora) ===
   const toggleSlot = (day: string, hour: string) => {
     setAvailability(prev => ({
       ...prev,
@@ -292,16 +512,9 @@ export function ProfessionalDashboard() {
     }));
   };
 
-  const STATUS_CONFIG = {
-    pending: { label: 'Pendiente', icon: AlertCircle, color: 'text-[#D97706]', bg: 'bg-[#FFFBEB]' },
-    confirmed: { label: 'Confirmado', icon: CheckCircle2, color: 'text-[#10B981]', bg: 'bg-[#ECFDF5]' },
-    completed: { label: 'Completado', icon: CheckCircle2, color: 'text-[#6B7280]', bg: 'bg-[#F3F4F6]' },
-    cancelled: { label: 'Cancelado', icon: XCircle, color: 'text-[#EF4444]', bg: 'bg-[#FEF2F2]' },
-  };
-
   const NAV_ITEMS = [
     { key: 'overview', icon: LayoutDashboard, label: 'Mi panel' },
-    { key: 'solicitudes', icon: Calendar, label: `Solicitudes (${requests.filter(r => r.status === 'pending').length})` },
+    { key: 'solicitudes', icon: Calendar, label: `Solicitudes (${pendingRequests.length})` },
     { key: 'servicios', icon: Briefcase, label: 'Mis servicios' },
     { key: 'disponibilidad', icon: Clock, label: 'Disponibilidad' },
     { key: 'perfil', icon: Settings, label: 'Editar perfil' },
@@ -316,6 +529,15 @@ export function ProfessionalDashboard() {
         loading={savingService}
         onClose={() => setServiceModalOpen(false)}
         onSubmit={handleSaveService}
+      />
+      <AcceptModal
+        open={acceptModalOpen}
+        loading={acceptLoading}
+        onClose={() => {
+          setAcceptModalOpen(false);
+          setAcceptingRequestId(null);
+        }}
+        onSubmit={handleAccept}
       />
 
       <div className="max-w-6xl mx-auto px-4 py-8">
@@ -373,10 +595,10 @@ export function ProfessionalDashboard() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: 'Solicitudes pendientes', value: requests.filter(r => r.status === 'pending').length, icon: AlertCircle, color: '#D97706', bg: '#FFFBEB' },
-                    { label: 'Trabajos completados', value: prof.completedJobs, icon: CheckCircle2, color: '#10B981', bg: '#ECFDF5' },
+                    { label: 'Solicitudes pendientes', value: pendingRequests.length, icon: AlertCircle, color: '#D97706', bg: '#FFFBEB' },
+                    { label: 'Total solicitudes', value: requests.length, icon: CheckCircle2, color: '#10B981', bg: '#ECFDF5' },
                     { label: 'Calificación', value: prof.rating, icon: Star, color: '#F59E0B', bg: '#FFFBEB' },
-                    { label: 'Clientes atendidos', value: 89, icon: Users, color: '#1E40AF', bg: '#EFF6FF' },
+                    { label: 'Clientes atendidos', value: requests.filter(r => r.status === 'COMPLETADA').length, icon: Users, color: '#1E40AF', bg: '#EFF6FF' },
                   ].map((stat, i) => (
                     <div key={i} className="bg-white rounded-2xl border border-[#E5E7EB] p-4">
                       <div className="flex items-center justify-between mb-2">
@@ -398,28 +620,46 @@ export function ProfessionalDashboard() {
                     </button>
                   </div>
                   <div className="divide-y divide-[#F3F4F6]">
-                    {requests.slice(0, 2).map(req => {
-                      const status = STATUS_CONFIG[req.status as keyof typeof STATUS_CONFIG];
+                    {requestsLoading ? (
+                      <div className="p-5">
+                        <div className="h-16 bg-[#F3F4F6] rounded-xl" />
+                      </div>
+                    ) : requests.length === 0 ? (
+                      <div className="p-5 text-center">
+                        <p className="text-sm text-[#6B7280]">No hay solicitudes aún</p>
+                      </div>
+                    ) : requests.slice(0, 3).map(req => {
+                      const status = STATUS_CONFIG[req.status];
                       const StatusIcon = status.icon;
                       return (
                         <div key={req.id} className="p-5 flex items-start gap-4">
-                          <img src={req.clientPhoto} alt={req.clientName} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                          <div className="w-10 h-10 bg-[#EFF6FF] rounded-xl flex items-center justify-center flex-shrink-0">
+                            <Briefcase className="w-5 h-5 text-[#1E40AF]" />
+                          </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
                               <div>
-                                <p className="font-medium text-[#111827] text-sm">{req.clientName}</p>
-                                <p className="text-xs text-[#6B7280]">{req.service}</p>
+                                <p className="font-medium text-[#111827] text-sm">{req.serviceName || 'Servicio'}</p>
+                                <p className="text-xs text-[#6B7280]">
+                                  Cliente: {req.userId.slice(0, 8)}…
+                                </p>
                               </div>
                               <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${status.color} ${status.bg}`}>
                                 <StatusIcon className="w-2.5 h-2.5" /> {status.label}
                               </span>
                             </div>
                             <div className="flex items-center gap-3 mt-1.5">
-                              <span className="text-xs text-[#9CA3AF] flex items-center gap-1"><Calendar className="w-3 h-3" /> {req.date}</span>
-                              <span className="text-xs text-[#9CA3AF] flex items-center gap-1"><Clock className="w-3 h-3" /> {req.time}</span>
+                              {req.scheduledDate && (
+                                <span className="text-xs text-[#9CA3AF] flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" /> {req.scheduledDate}
+                                </span>
+                              )}
+                              <span className="text-xs text-[#9CA3AF] flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> {req.workday}
+                              </span>
                             </div>
                           </div>
-                          <span className="text-sm font-bold text-[#1E40AF] flex-shrink-0">${req.price.toLocaleString()}</span>
+                          <span className="text-sm font-bold text-[#1E40AF] flex-shrink-0">{formatPrice(req.servicePrice)}</span>
                         </div>
                       );
                     })}
@@ -448,60 +688,131 @@ export function ProfessionalDashboard() {
 
             {view === 'solicitudes' && (
               <div className="space-y-5">
-                <h1 className="text-2xl font-bold text-[#111827]">Solicitudes de reserva</h1>
-                <div className="space-y-4">
-                  {requests.map(req => {
-                    const status = STATUS_CONFIG[req.status as keyof typeof STATUS_CONFIG];
-                    const StatusIcon = status.icon;
-                    return (
-                      <div key={req.id} className={`bg-white rounded-2xl border ${req.status === 'pending' ? 'border-[#FCD34D]' : 'border-[#E5E7EB]'} p-5 shadow-sm`}>
-                        <div className="flex items-start gap-4 flex-wrap">
-                          <img src={req.clientPhoto} alt={req.clientName} className="w-12 h-12 rounded-xl object-cover flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2 flex-wrap">
-                              <div>
-                                <p className="font-semibold text-[#111827]">{req.clientName}</p>
-                                <p className="text-sm text-[#6B7280]">Solicita: <span className="font-medium text-[#374151]">{req.service}</span></p>
-                              </div>
-                              <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium ${status.color} ${status.bg}`}>
-                                <StatusIcon className="w-3 h-3" /> {status.label}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-4 mt-2 flex-wrap">
-                              <span className="text-sm text-[#6B7280] flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {req.date}</span>
-                              <span className="text-sm text-[#6B7280] flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {req.time}</span>
-                              <span className="text-sm text-[#6B7280] flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {req.address}</span>
-                            </div>
-                            {req.notes && (
-                              <div className="mt-2 p-2.5 bg-[#F9FAFB] rounded-lg border border-[#E5E7EB]">
-                                <p className="text-xs text-[#6B7280]">📝 {req.notes}</p>
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <p className="text-lg font-bold text-[#1E40AF]">${req.price.toLocaleString()}</p>
-                          </div>
-                        </div>
-                        {req.status === 'pending' && (
-                          <div className="flex gap-2 mt-4 pt-4 border-t border-[#F3F4F6]">
-                            <button
-                              onClick={() => handleStatus(req.id, 'confirmed')}
-                              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#10B981] text-white rounded-xl text-sm font-semibold hover:bg-[#0EA875] transition-colors"
-                            >
-                              <CheckCircle2 className="w-4 h-4" /> Aceptar
-                            </button>
-                            <button
-                              onClick={() => handleStatus(req.id, 'cancelled')}
-                              className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-[#E5E7EB] text-[#EF4444] rounded-xl text-sm font-medium hover:bg-[#FEF2F2] transition-colors"
-                            >
-                              <XCircle className="w-4 h-4" /> Rechazar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <h1 className="text-2xl font-bold text-[#111827]">Solicitudes de reserva</h1>
+                  <button
+                    onClick={loadRequests}
+                    disabled={requestsLoading}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl border border-[#E5E7EB] text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors disabled:opacity-60"
+                    type="button"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${requestsLoading ? 'animate-spin' : ''}`} />
+                    Actualizar
+                  </button>
                 </div>
+
+                {requestsError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 whitespace-pre-line">
+                    {requestsError}
+                  </div>
+                )}
+
+                {requestsLoading ? (
+                  <div className="space-y-3">
+                    <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 h-32" />
+                    <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 h-32" />
+                  </div>
+                ) : requests.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-[#E5E7EB] p-8 text-center">
+                    <Calendar className="w-10 h-10 text-[#D1D5DB] mx-auto mb-2" />
+                    <p className="text-sm text-[#6B7280]">No tienes solicitudes aún</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {requests.map(req => {
+                      const status = STATUS_CONFIG[req.status];
+                      const StatusIcon = status.icon;
+                      const loading = actionLoadingId === req.id;
+                      const canAcceptOrReject = req.status === 'PENDIENTE';
+                      const canCancel = ['ACEPTADA', 'CONFIRMADA'].includes(req.status);
+
+                      return (
+                        <div key={req.id} className={`bg-white rounded-2xl border ${req.status === 'PENDIENTE' ? 'border-[#FCD34D]' : 'border-[#E5E7EB]'} p-5 shadow-sm`}>
+                          <div className="flex items-start gap-4 flex-wrap">
+                            <div className="w-12 h-12 rounded-xl bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
+                              <Briefcase className="w-5 h-5 text-[#1E40AF]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2 flex-wrap">
+                                <div>
+                                  <p className="font-semibold text-[#111827]">{req.serviceName || 'Servicio'}</p>
+                                  <p className="text-sm text-[#6B7280]">
+                                    Cliente: <span className="font-medium text-[#374151]">{req.userId.slice(0, 8)}…</span>
+                                  </p>
+                                </div>
+                                <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium ${status.color} ${status.bg}`}>
+                                  <StatusIcon className="w-3 h-3" /> {status.label}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-4 mt-2 flex-wrap">
+                                {req.scheduledDate && (
+                                  <span className="text-sm text-[#6B7280] flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5" /> {req.scheduledDate}
+                                  </span>
+                                )}
+                                <span className="text-sm text-[#6B7280] flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5" /> {req.workday}
+                                </span>
+                                {req.proposedStartTime && req.proposedEndTime && (
+                                  <span className="text-sm text-[#1E40AF] font-medium flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {req.proposedStartTime.slice(0, 5)} - {req.proposedEndTime.slice(0, 5)}
+                                  </span>
+                                )}
+                                <span className="text-sm text-[#6B7280] flex items-center gap-1">
+                                  <MapPin className="w-3.5 h-3.5" />
+                                  {req.latitude.toFixed(4)}, {req.longitude.toFixed(4)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <p className="text-lg font-bold text-[#1E40AF]">{formatPrice(req.servicePrice)}</p>
+                            </div>
+                          </div>
+
+                          {canAcceptOrReject && (
+                            <div className="flex gap-2 mt-4 pt-4 border-t border-[#F3F4F6]">
+                              <button
+                                onClick={() => openAcceptModal(req.id)}
+                                disabled={loading}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#10B981] text-white rounded-xl text-sm font-semibold hover:bg-[#0EA875] transition-colors disabled:opacity-60"
+                              >
+                                <CheckCircle2 className="w-4 h-4" /> Aceptar
+                              </button>
+                              <button
+                                onClick={() => handleReject(req.id)}
+                                disabled={loading}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-[#E5E7EB] text-[#EF4444] rounded-xl text-sm font-medium hover:bg-[#FEF2F2] transition-colors disabled:opacity-60"
+                              >
+                                {loading ? (
+                                  <div className="w-4 h-4 border-2 border-[#EF4444]/30 border-t-[#EF4444] rounded-full animate-spin" />
+                                ) : (
+                                  <><XCircle className="w-4 h-4" /> Rechazar</>
+                                )}
+                              </button>
+                            </div>
+                          )}
+
+                          {canCancel && (
+                            <div className="flex gap-2 mt-4 pt-4 border-t border-[#F3F4F6]">
+                              <button
+                                onClick={() => handleCancelReq(req.id)}
+                                disabled={loading}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-[#E5E7EB] text-[#EF4444] rounded-xl text-sm font-medium hover:bg-[#FEF2F2] transition-colors disabled:opacity-60"
+                              >
+                                {loading ? (
+                                  <div className="w-4 h-4 border-2 border-[#EF4444]/30 border-t-[#EF4444] rounded-full animate-spin" />
+                                ) : (
+                                  <><XCircle className="w-4 h-4" /> Cancelar solicitud</>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
