@@ -36,63 +36,46 @@ function sanitize<T extends Record<string, any>>(obj: T): Partial<T> {
 
 export class AuthService {
   static async register(data: RegisterRequest): Promise<void> {
-    await api.post("/register", data);
+    await api.post("/auth/register", data);
   }
 
   static async login(data: LoginRequest): Promise<LoginSession> {
-    const res = await api.post("/login", data, {
+    const res = await api.post("/auth/login", data, {
       headers: { "Content-Type": "application/json" },
     });
-
     const token = extractToken(res.data);
-    if (!token) {
-      throw new Error("No se encontró token en la respuesta de /login.");
-    }
-
+    if (!token) throw new Error("No se encontró token en la respuesta de /auth/login.");
     const payload = decodeJwtPayload(token);
     return { token, payload };
   }
 
   static async logout(): Promise<void> {
-    await api.post("/logout");
+    await api.post("/auth/logout");
   }
 
   static async getProfile() {
-  const res = await api.get("/profile");
-  return res.data;
-}
-
-static async updateProfile(
-  request: UpdateProfileRequest,
-  file?: File | null
-): Promise<UserProfileResponse> {
-  const cleaned = sanitize({
-    firstName: request.firstName,
-    lastName: request.lastName,
-    phone: request.phone,
-    address: request.address,
-    age: request.age,
-  });
-
-  const form = new FormData();
-
-  const jsonFile = new File(
-    [JSON.stringify(cleaned)],
-    "request.json",
-    { type: "application/json" }
-  );
-  form.append("request", jsonFile);
-
-  if (file) {
-    form.append("file", file, file.name);
+    const res = await api.get("/auth/profile");
+    return res.data;
   }
 
-  const res = await api.put("/update-profile", form, {
-    headers: { Accept: "application/json" },
-  });
+  static async updateProfile(request: UpdateProfileRequest, file?: File | null) {
+    const cleaned = sanitize({
+      firstName: request.firstName,
+      lastName: request.lastName,
+      phone: request.phone,
+      address: request.address,
+      age: request.age,
+    });
+    const form = new FormData();
+    const jsonFile = new File([JSON.stringify(cleaned)], "request.json", { type: "application/json" });
+    form.append("request", jsonFile);
+    if (file) form.append("file", file, file.name);
 
-  return res.data as UserProfileResponse;
-}
+    const res = await api.put("/auth/profile", form, {
+      headers: { Accept: "application/json" },
+    });
+    return res.data as UserProfileResponse;
+  }
 
   
 
