@@ -16,13 +16,19 @@ export default defineConfig({
         target: 'https://dz5rvnxq1a.execute-api.us-east-2.amazonaws.com',
         changeOrigin: true,
         secure: true,
+        headers: {
+          origin: 'https://front-by-me.vercel.app',
+        },
       },
       '/api/v1': {
         target: 'https://dz5rvnxq1a.execute-api.us-east-2.amazonaws.com',
         changeOrigin: true,
         secure: true,
+        headers: {
+          origin: 'https://front-by-me.vercel.app',
+        },
       },
     },
-  },
+  },                          // ← esta llave cerraba server y faltaba
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
