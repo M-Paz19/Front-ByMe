@@ -8,7 +8,10 @@ import {
 import { categories as mockCategories, IMGS } from '../data/mockData';
 import { RealMap } from '../components/RealMap';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
-import type { ProfessionalPublicDTO } from '../../services/professionals/professionals.types';
+import type {
+  ProfessionalPublicDTO,
+  ProfessionalDetailPublicDTO,
+} from '../../services/professionals/professionals.types';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck, Bug,
@@ -61,29 +64,42 @@ interface DisplayProfessional {
   address?: string;
 }
 
-function mapToDisplay(p: ProfessionalPublicDTO, index: number): DisplayProfessional {
-  const fullName = `${p.firstName} ${p.lastName}`.trim();
-  const baseLat = 2.4419;
-  const baseLng = -76.6065;
-  const offset = (index % 10) * 0.003;
-  const offsetLng = ((index * 7) % 10) * 0.003;
+/**
+ * Combina datos del listado paginado + detalle (para coords reales).
+ * El backend tiene `lat`/`lng` invertidos, así que los corregimos aquí.
+ */
+function buildDisplay(
+  base: ProfessionalPublicDTO,
+  detail: ProfessionalDetailPublicDTO | null,
+): DisplayProfessional {
+  const fullName = `${base.firstName} ${base.lastName}`.trim();
+
+  // ⚠ El backend invierte lat/lng en el endpoint individual:
+  //    `lat` contiene en realidad la longitud
+  //    `lng` contiene en realidad la latitud
+  let realLat: number | undefined;
+  let realLng: number | undefined;
+  if (detail && typeof detail.lat === 'number' && typeof detail.lng === 'number') {
+    realLat = detail.lng; // swap
+    realLng = detail.lat; // swap
+  }
 
   return {
-    id: p.id,
+    id: base.id,
     name: fullName || 'Profesional',
-    specialty: p.professionName || '—',
-    category: slugify(p.categoryName || ''),
-    photo: p.profilePictureUrl || getFallbackPhoto(p.id),
-    rating: p.rating || 0,
+    specialty: base.professionName || '—',
+    category: slugify(base.categoryName || ''),
+    photo: base.profilePictureUrl || getFallbackPhoto(base.id),
+    rating: base.rating || 0,
     reviewCount: 0,
-    available: p.status === 'DISPONIBLE',
-    badge: p.gold ? 'Top profesional' : (p.accountStatus === 'VERIFICADO' ? 'Verificado' : null),
-    shortDescription: `${p.professionName || ''} · ${p.categoryName || ''}`,
+    available: base.status === 'DISPONIBLE',
+    badge: base.gold ? 'Top profesional' : (base.accountStatus === 'VERIFICADO' ? 'Verificado' : null),
+    shortDescription: `${base.professionName || ''} · ${base.categoryName || ''}`,
     distance: '—',
     hourlyRate: 0,
     responseTime: 'Pronto',
-    lat: baseLat + offset - 0.015,
-    lng: baseLng + offsetLng - 0.015,
+    lat: realLat,
+    lng: realLng,
   };
 }
 
@@ -100,7 +116,7 @@ export function SearchPage() {
 
   const [categories, setCategories] = useState(mockCategories);
 
-  const [pros, setPros] = useState<ProfessionalPublicDTO[]>([]);
+  const [pros, setPros] = useState<DisplayProfessional[]>([]);
   const [page, setPage] = useState(0);
   const [size] = useState(12);
   const [totalPages, setTotalPages] = useState(0);
@@ -108,6 +124,7 @@ export function SearchPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Cargar categorías para filtros
   useEffect(() => {
     let mounted = true;
     ProfessionalsService.getCategoriesNames()
@@ -130,17 +147,33 @@ export function SearchPage() {
     return () => { mounted = false; };
   }, []);
 
+  // Cargar lista paginada + coords reales en paralelo
   useEffect(() => {
     let mounted = true;
     setLoading(true);
     setError(null);
 
     ProfessionalsService.getPublicList(page, size)
-      .then((res) => {
+      .then(async (res) => {
         if (!mounted) return;
-        setPros(res.content || []);
+        const baseList = res.content || [];
+
         setTotalPages(res.totalPages || 0);
         setTotalElements(res.totalElements || 0);
+
+        // Mostrar primero la lista sin coords (rápido), luego completar con coords
+        setPros(baseList.map((p) => buildDisplay(p, null)));
+
+        // Cargar coords reales en paralelo (no bloquea la UI)
+        const detailPromises = baseList.map((p) =>
+          ProfessionalsService.getPublicById(p.id).catch(() => null)
+        );
+
+        const details = await Promise.all(detailPromises);
+        if (!mounted) return;
+
+        const enriched = baseList.map((p, i) => buildDisplay(p, details[i]));
+        setPros(enriched);
       })
       .catch((e) => {
         if (mounted) setError(e?.response?.data?.message || 'No se pudieron cargar los profesionales.');
@@ -153,9 +186,7 @@ export function SearchPage() {
   }, [page, size]);
 
   const filtered: DisplayProfessional[] = useMemo(() => {
-    const display = pros.map((p, i) => mapToDisplay(p, i));
-
-    return display.filter(p => {
+    return pros.filter(p => {
       const q = search.toLowerCase().trim();
       const matchSearch = !q ||
         p.name.toLowerCase().includes(q) ||
@@ -176,12 +207,19 @@ export function SearchPage() {
 
   const reload = () => {
     setLoading(true);
+    setPros([]);
     ProfessionalsService.getPublicList(page, size)
-      .then((res) => {
-        setPros(res.content || []);
+      .then(async (res) => {
+        const baseList = res.content || [];
+        setPros(baseList.map((p) => buildDisplay(p, null)));
         setTotalPages(res.totalPages || 0);
         setTotalElements(res.totalElements || 0);
         setError(null);
+
+        const details = await Promise.all(
+          baseList.map((p) => ProfessionalsService.getPublicById(p.id).catch(() => null))
+        );
+        setPros(baseList.map((p, i) => buildDisplay(p, details[i])));
       })
       .catch((e) => setError(e?.response?.data?.message || 'No se pudieron cargar los profesionales.'))
       .finally(() => setLoading(false));

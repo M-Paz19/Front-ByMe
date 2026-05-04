@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import {
   LayoutDashboard, Briefcase, Calendar, Settings, LogOut, Star,
@@ -18,7 +18,6 @@ type View = 'overview' | 'solicitudes' | 'servicios' | 'disponibilidad' | 'perfi
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const HOURS = ['7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'];
 
-// Config visual para los 8 estados del backend
 const STATUS_CONFIG: Record<RequestStatus, {
   label: string;
   icon: any;
@@ -328,13 +327,27 @@ export function ProfessionalDashboard() {
   const { logout, userName, userPhoto, user, updateProfile, authLoading, authError } = useApp();
   const prof = professionals[0];
 
-  // === Perfil ===
+  // === Perfil — form controlado ===
+  const [formFirstName, setFormFirstName] = useState('');
+  const [formLastName, setFormLastName] = useState('');
+  const [formPhone, setFormPhone] = useState('');
+  const [formAge, setFormAge] = useState('');
+  const [formAddress, setFormAddress] = useState('');
+
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  // Hidratar form cuando llega el user
+  useEffect(() => {
+    if (!user) return;
+    setFormFirstName(user.firstName || '');
+    setFormLastName(user.lastName || '');
+    setFormPhone(user.phone || '');
+    setFormAge(typeof user.age === 'number' ? String(user.age) : '');
+    setFormAddress(user.address || '');
+  }, [user]);
+
   // === IDs ===
-  // Backend devuelve professionalId en /profile cuando rol es PROFESSIONAL
-  // Fallback a user.id por compatibilidad
   const professionalId = user?.professionalId || user?.id;
 
   // === Servicios (API) ===
@@ -438,7 +451,6 @@ export function ProfessionalDashboard() {
     }
   };
 
-  // Cargar solicitudes al montar y al entrar a "solicitudes" u "overview"
   useEffect(() => {
     if (view === 'solicitudes' || view === 'overview') {
       void loadRequests();
@@ -446,7 +458,7 @@ export function ProfessionalDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, professionalId]);
 
-  const pendingRequests = useMemo(
+  const pendingRequests = React.useMemo(
     () => requests.filter(r => r.status === 'PENDIENTE'),
     [requests]
   );
@@ -513,6 +525,48 @@ export function ProfessionalDashboard() {
         ? prev[day].filter(h => h !== hour)
         : [...prev[day], hour],
     }));
+  };
+
+  // === Submit del perfil ===
+  const handleProfileSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setProfileSuccess(null);
+    setProfileError(null);
+
+    const firstName = formFirstName.trim();
+    const lastName = formLastName.trim();
+    const phone = formPhone.trim();
+    const address = formAddress.trim();
+    const ageRaw = formAge.trim();
+
+    let age: number | undefined;
+    if (ageRaw) {
+      const n = Number(ageRaw);
+      if (Number.isNaN(n) || n < 18) {
+        setProfileError('La edad debe ser un número (mínimo 18).');
+        return;
+      }
+      age = n;
+    }
+
+    const payload: any = {};
+    if (firstName) payload.firstName = firstName;
+    if (lastName) payload.lastName = lastName;
+    if (phone) payload.phone = phone;
+    if (address) payload.address = address;
+    if (typeof age === 'number') payload.age = age;
+
+    if (Object.keys(payload).length === 0) {
+      setProfileError('No hay cambios para guardar.');
+      return;
+    }
+
+    try {
+      await updateProfile(payload);
+      setProfileSuccess('Perfil actualizado exitosamente.');
+    } catch (err: any) {
+      setProfileError(getApiMsg(err));
+    }
   };
 
   const NAV_ITEMS = [
@@ -962,132 +1016,105 @@ export function ProfessionalDashboard() {
                     </div>
                   </div>
 
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      setProfileSuccess(null);
-                      setProfileError(null);
-                      const form = new FormData(e.currentTarget);
-                      const firstName = String(form.get('firstName') || '').trim();
-                      const lastName = String(form.get('lastName') || '').trim();
-                      const phone = String(form.get('phone') || '').trim();
-                      const address = String(form.get('address') || '').trim();
-                      const ageRaw = String(form.get('age') || '').trim();
-
-                      let age: number | undefined;
-                      if (ageRaw) {
-                        const n = Number(ageRaw);
-                        if (Number.isNaN(n) || n < 18) {
-                          setProfileError('La edad debe ser un número (mínimo 18).');
-                          return;
-                        }
-                        age = n;
-                      }
-
-                      const payload: any = {};
-                      if (firstName) payload.firstName = firstName;
-                      if (lastName) payload.lastName = lastName;
-                      if (phone) payload.phone = phone;
-                      if (address) payload.address = address;
-                      if (typeof age === 'number') payload.age = age;
-
-                      if (Object.keys(payload).length === 0) {
-                        setProfileError('No hay cambios para guardar.');
-                        return;
-                      }
-
-                      try {
-                        await updateProfile(payload);
-                        setProfileSuccess('Perfil actualizado exitosamente.');
-                      } catch (err: any) {
-                        setProfileError(err?.response?.data?.message ?? 'Error actualizando perfil.');
-                      }
-                    }}
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Nombre</label>
-                        <input
-                          name="firstName"
-                          type="text"
-                          defaultValue={user?.firstName || ''}
-                          className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Apellido</label>
-                        <input
-                          name="lastName"
-                          type="text"
-                          defaultValue={user?.lastName || ''}
-                          className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Teléfono</label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+                  {!user ? (
+                    <div className="space-y-3 animate-pulse">
+                      <div className="h-10 bg-[#F3F4F6] rounded-xl" />
+                      <div className="h-10 bg-[#F3F4F6] rounded-xl" />
+                      <div className="h-10 bg-[#F3F4F6] rounded-xl" />
+                    </div>
+                  ) : (
+                    <form onSubmit={handleProfileSubmit}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Nombre</label>
                           <input
-                            name="phone"
-                            type="tel"
-                            defaultValue={user?.phone || ''}
-                            className="w-full pl-9 pr-4 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
+                            value={formFirstName}
+                            onChange={(e) => setFormFirstName(e.target.value)}
+                            type="text"
+                            className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Apellido</label>
+                          <input
+                            value={formLastName}
+                            onChange={(e) => setFormLastName(e.target.value)}
+                            type="text"
+                            className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Teléfono</label>
+                          <div className="relative">
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+                            <input
+                              value={formPhone}
+                              onChange={(e) => setFormPhone(e.target.value)}
+                              type="tel"
+                              className="w-full pl-9 pr-4 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Edad</label>
+                          <input
+                            value={formAge}
+                            onChange={(e) => setFormAge(e.target.value)}
+                            type="number"
+                            min={18}
+                            placeholder="28"
+                            className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-sm font-medium text-[#374151] mb-1.5">Dirección de trabajo</label>
+                          {/*
+                            GoogleMapPicker mantiene su propio state para el address con autocomplete.
+                            Cuando el usuario selecciona una sugerencia o hace clic en el mapa,
+                            actualizamos formAddress vía onAddressChange.
+                            Si solo escribe a mano, el GoogleMapPicker lo refleja en formAddress
+                            mediante el useEffect que sincroniza defaultAddress.
+                          */}
+                          <GoogleMapPicker
+                            defaultAddress={formAddress}
+                            onAddressChange={(addr) => setFormAddress(addr)}
                           />
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Edad</label>
-                        <input
-                          name="age"
-                          type="number"
-                          min={18}
-                          defaultValue={user?.age?.toString() || ''}
-                          placeholder="28"
-                          className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all"
-                        />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Dirección de trabajo</label>
-                        {/*
-                          GoogleMapPicker renderiza internamente un <input type="hidden" name="address">
-                          que el FormData del <form> de abajo lee automáticamente.
-                        */}
-                        <GoogleMapPicker defaultAddress={user?.address || ''} />
-                      </div>
-                    </div>
 
-                    {(profileError || authError) && (
-                      <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
-                        {profileError || authError}
-                      </div>
-                    )}
-                    {profileSuccess && (
-                      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                        {profileSuccess}
-                      </div>
-                    )}
+                      {(profileError || authError) && (
+                        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 whitespace-pre-line">
+                          {profileError || authError}
+                        </div>
+                      )}
+                      {profileSuccess && (
+                        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                          {profileSuccess}
+                        </div>
+                      )}
 
-                    <div className="flex gap-3 mt-6 pt-5 border-t border-[#F3F4F6]">
-                      <button
-                        type="submit"
-                        disabled={authLoading}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-[#1E40AF] text-white rounded-xl text-sm font-semibold hover:bg-[#1D3FA0] transition-colors disabled:opacity-70"
-                      >
-                        {authLoading ? (
-                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        ) : (
-                          <><Save className="w-4 h-4" /> Guardar cambios</>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setView('overview')}
-                        className="px-5 py-2.5 border border-[#E5E7EB] text-[#374151] rounded-xl text-sm font-medium hover:bg-[#F9FAFB] transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </form>
+                      <div className="flex gap-3 mt-6 pt-5 border-t border-[#F3F4F6]">
+                        <button
+                          type="submit"
+                          disabled={authLoading}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-[#1E40AF] text-white rounded-xl text-sm font-semibold hover:bg-[#1D3FA0] transition-colors disabled:opacity-70"
+                        >
+                          {authLoading ? (
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
+                            <><Save className="w-4 h-4" /> Guardar cambios</>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setView('overview')}
+                          className="px-5 py-2.5 border border-[#E5E7EB] text-[#374151] rounded-xl text-sm font-medium hover:bg-[#F9FAFB] transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               </div>
             )}

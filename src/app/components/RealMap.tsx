@@ -2,12 +2,12 @@
  * RealMap
  * ─────────────────────────────────────────────────────────────────────────────
  * Reemplazo del MockMap SVG con Google Maps real.
- * Geocodifica la dirección (prof.address) de cada profesional y coloca un
- * marcador numerado. Al seleccionar un profesional en la lista lateral,
- * el mapa centra y hace zoom en su marcador y muestra un InfoWindow.
  *
- * Props: idénticas a MockMap para sustituirlo sin tocar SearchPage.
- *   - professionals: Professional[]
+ * Si el profesional ya trae `lat` y `lng` en sus props, los usa DIRECTAMENTE.
+ * Si no, intenta geocodificar `prof.address` como fallback.
+ *
+ * Props: idénticas a MockMap
+ *   - professionals: Professional[]  (con lat/lng opcionales)
  *   - selectedId: string | null
  *   - onSelect: (id: string) => void
  *
@@ -28,7 +28,7 @@ import { GOOGLE_MAPS_LOADER_OPTIONS } from './googleMapsConfig';
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface RealMapProps {
-  professionals: Professional[];
+  professionals: (Professional & { lat?: number; lng?: number })[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 }
@@ -68,26 +68,50 @@ export function RealMap({ professionals, selectedId, onSelect }: RealMapProps) {
   const [geocoding, setGeocoding] = useState(false);
   const [openInfoId, setOpenInfoId] = useState<string | null>(null);
 
-  // ── Geocodificar todas las direcciones ─────────────────────────────────────
+  // ── Resolver coordenadas: usar las del prop si existen, geocodificar si no ─
   useEffect(() => {
-    if (!isLoaded || professionals.length === 0) return;
+    if (!isLoaded || professionals.length === 0) {
+      setProfsWithCoords([]);
+      return;
+    }
+
+    // Separar los que YA tienen coords vs. los que necesitan geocoding
+    const withCoords: ProfWithCoords[] = [];
+    const needGeocode: { prof: Professional; index: number }[] = [];
+
+    const results: ProfWithCoords[] = professionals.map((p, i) => {
+      const hasCoords = typeof p.lat === 'number' && typeof p.lng === 'number';
+      if (hasCoords) {
+        const item = { ...p, lat: p.lat, lng: p.lng };
+        withCoords.push(item);
+        return item;
+      } else {
+        needGeocode.push({ prof: p, index: i });
+        return { ...p };
+      }
+    });
+
+    // Si todos ya tienen coords, no hace falta geocodificar nada
+    if (needGeocode.length === 0) {
+      setProfsWithCoords(results);
+      setGeocoding(false);
+      return;
+    }
 
     setGeocoding(true);
     const geocoder = new google.maps.Geocoder();
-    let remaining = professionals.length;
-    const results: ProfWithCoords[] = professionals.map((p) => ({ ...p }));
+    let remaining = needGeocode.length;
 
-    professionals.forEach((prof, i) => {
+    needGeocode.forEach(({ prof, index }) => {
       const query = prof.address
         ? `${prof.address}, Popayán, Colombia`
         : 'Popayán, Cauca, Colombia';
 
       geocoder.geocode({ address: query, region: 'CO' }, (geoResults, status) => {
         if (status === 'OK' && geoResults?.[0]?.geometry?.location) {
-          // Pequeño offset aleatorio para evitar que marcadores se superpongan
-          // cuando dos profesionales tienen la misma dirección
-          results[i].lat = geoResults[0].geometry.location.lat() + (Math.random() - 0.5) * 0.0008;
-          results[i].lng = geoResults[0].geometry.location.lng() + (Math.random() - 0.5) * 0.0008;
+          // Pequeño offset para evitar marcadores superpuestos
+          results[index].lat = geoResults[0].geometry.location.lat() + (Math.random() - 0.5) * 0.0008;
+          results[index].lng = geoResults[0].geometry.location.lng() + (Math.random() - 0.5) * 0.0008;
         }
         remaining--;
         if (remaining === 0) {
@@ -117,7 +141,7 @@ export function RealMap({ professionals, selectedId, onSelect }: RealMapProps) {
     setOpenInfoId(prof.id);
   };
 
-  // ── Iconos (inicializados dentro del componente para que isLoaded ya sea true) ──
+  // ── Iconos ──────────────────────────────────────────────────────────────────
   const pinDefault = isLoaded
     ? {
         path: google.maps.SymbolPath.CIRCLE,
@@ -218,7 +242,9 @@ export function RealMap({ professionals, selectedId, onSelect }: RealMapProps) {
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-[#F3F4F6]">
                       <span className="text-xs text-yellow-500">★ {prof.rating}</span>
-                      <span className="text-xs text-[#10B981] font-medium">{prof.distance}</span>
+                      {prof.distance && prof.distance !== '—' && (
+                        <span className="text-xs text-[#10B981] font-medium">{prof.distance}</span>
+                      )}
                     </div>
                   </div>
                 </InfoWindowF>

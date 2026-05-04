@@ -2,10 +2,14 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://dz5rvnxq1a.execute-api.us-east-2.amazonaws.com/:path*"
+      "destination": "https://dz5rvnxq1a.execute-api.us-east-2.amazonaws.com/api/:path*"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/auth/:path*",
+      "destination": "https://dz5rvnxq1a.execute-api.us-east-2.amazonaws.com/auth/:path*"
+    },
+    {
+      "source": "/((?!api/|auth/).*)",
       "destination": "/index.html"
     }
   ]

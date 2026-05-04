@@ -2,17 +2,17 @@
  * GoogleMapPicker
  * ─────────────────────────────────────────────────────────────────────────────
  * Campo de dirección con Google Places Autocomplete + mapa interactivo.
- * Diseñado para usarse dentro del formulario de "Editar perfil" del profesional.
- *
- * Flujo:
- *  1. El usuario escribe → Places Autocomplete sugiere direcciones.
- *  2. Al elegir una, el mapa centra el marcador en esa ubicación.
- *  3. El usuario puede hacer clic en el mapa para ajustar el pin manualmente
- *     (geocodificación inversa → actualiza el texto del campo).
- *  4. El input hidden "address" se mantiene sincronizado para que el
- *     <form> del padre lo lea con FormData como siempre.
  *
  * APIs de Google usadas:  Maps JavaScript API · Places API · Geocoding API
+ *
+ * NOTA DE DISEÑO:
+ * El input es CONTROLADO por React (`value=...`). Hay tres formas de modificar
+ * la dirección:
+ *  1. Escribir a mano: dispara `onAddressChange(addr, NaN, NaN)` para que el
+ *     padre actualice su state. lat/lng son NaN porque no sabemos las coords.
+ *  2. Elegir sugerencia del autocomplete: dispara `onAddressChange(addr, lat, lng)`.
+ *  3. Click en el mapa: dispara `onAddressChange(addr, lat, lng)` con la dirección
+ *     resuelta por geocodificación inversa.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,15 +25,12 @@ import {
 import { AlertCircle, Loader2, MapPin } from 'lucide-react';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from './googleMapsConfig';
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-
 const MAP_CONTAINER_STYLE: React.CSSProperties = {
   width: '100%',
   height: '240px',
   borderRadius: '12px',
 };
 
-/** Centro por defecto → Popayán, Colombia */
 const DEFAULT_CENTER = { lat: 2.4448, lng: -76.6147 };
 
 const MAP_OPTIONS: google.maps.MapOptions = {
@@ -47,19 +44,16 @@ const MAP_OPTIONS: google.maps.MapOptions = {
   ],
 };
 
-// ─── Props ────────────────────────────────────────────────────────────────────
-
 interface GoogleMapPickerProps {
   /** Valor inicial del campo (viene de user.address) */
   defaultAddress?: string;
   /**
-   * Callback para que el padre pueda actualizar su propio estado si lo necesita.
-   * El formulario lee la dirección desde el input hidden, así que esto es opcional.
+   * Callback que se dispara cuando cambia la dirección.
+   * - Si el usuario eligió sugerencia o hizo clic en el mapa: lat/lng son números válidos
+   * - Si el usuario solo escribió a mano: lat=NaN, lng=NaN
    */
   onAddressChange?: (address: string, lat: number, lng: number) => void;
 }
-
-// ─── Componente ───────────────────────────────────────────────────────────────
 
 export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: GoogleMapPickerProps) {
   const apiKey = GOOGLE_MAPS_LOADER_OPTIONS.googleMapsApiKey;
@@ -73,20 +67,26 @@ export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: Google
   const [geocodeError, setGeocodeError] = useState(false);
 
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  // Ref al input hidden que el <form> leerá con name="address"
-  const hiddenInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Actualiza el campo oculto y dispara el callback ────────────────────────
+  // Sincronizar el inputValue cuando llega defaultAddress por primera vez.
+  // Solo lo hacemos UNA vez para no sobrescribir lo que el usuario está escribiendo.
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (!initializedRef.current && defaultAddress) {
+      setInputValue(defaultAddress);
+      initializedRef.current = true;
+    }
+  }, [defaultAddress]);
+
   const syncAddress = useCallback(
     (addr: string, lat: number, lng: number) => {
       setInputValue(addr);
-      if (hiddenInputRef.current) hiddenInputRef.current.value = addr;
       onAddressChange?.(addr, lat, lng);
     },
     [onAddressChange],
   );
 
-  // ── Geocodificar la dirección por defecto al montar ────────────────────────
+  // Geocodificar la dirección por defecto al montar
   useEffect(() => {
     if (!isLoaded || !defaultAddress) return;
     const geocoder = new google.maps.Geocoder();
@@ -103,7 +103,6 @@ export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: Google
     });
   }, [isLoaded, defaultAddress]);
 
-  // ── Clic en el mapa → geocodificación inversa ──────────────────────────────
   const onMapClick = useCallback(
     (e: google.maps.MapMouseEvent) => {
       if (!e.latLng) return;
@@ -121,7 +120,6 @@ export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: Google
     [syncAddress],
   );
 
-  // ── Autocomplete: lugar seleccionado ──────────────────────────────────────
   const onPlaceChanged = () => {
     if (!autocompleteRef.current) return;
     const place = autocompleteRef.current.getPlace();
@@ -137,7 +135,13 @@ export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: Google
     syncAddress(addr, lat, lng);
   };
 
-  // ── Estados de carga / error ───────────────────────────────────────────────
+  // Cambio manual del input: notifica al padre con coords NaN
+  const handleManualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
+    onAddressChange?.(value, NaN, NaN);
+  };
+
   if (!apiKey) {
     return (
       <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-sm">
@@ -159,7 +163,6 @@ export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: Google
   if (!isLoaded) {
     return (
       <div className="space-y-2">
-        {/* Skeleton del input */}
         <div className="w-full h-11 bg-[#F3F4F6] rounded-xl animate-pulse" />
         <div className="flex items-center gap-2 text-[#9CA3AF] text-sm py-1">
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -169,14 +172,8 @@ export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: Google
     );
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-3">
-      {/*
-        Input VISIBLE con Autocomplete.
-        El <form> NO leerá este input directamente (no tiene `name`).
-        El valor real va al input hidden de abajo.
-      */}
       <div className="relative">
         <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF] z-10 pointer-events-none" />
         <Autocomplete
@@ -186,25 +183,14 @@ export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: Google
         >
           <input
             type="text"
+            name="address"
             value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value);
-              // Sincronizar también mientras escribe (sin coordenadas exactas)
-              if (hiddenInputRef.current) hiddenInputRef.current.value = e.target.value;
-            }}
+            onChange={handleManualChange}
             placeholder="Ej: Calle 5 # 4-32, Popayán, Cauca"
             className="w-full pl-9 pr-4 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1E40AF]/20 focus:border-[#1E40AF] transition-all text-sm"
           />
         </Autocomplete>
       </div>
-
-      {/* Input OCULTO que el <form> lee con name="address" */}
-      <input
-        ref={hiddenInputRef}
-        type="hidden"
-        name="address"
-        defaultValue={defaultAddress}
-      />
 
       {geocodeError && (
         <p className="text-xs text-amber-600 flex items-center gap-1.5">
@@ -213,7 +199,6 @@ export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: Google
         </p>
       )}
 
-      {/* Mapa */}
       <div className="rounded-xl overflow-hidden border border-[#E5E7EB] shadow-sm">
         <GoogleMap
           mapContainerStyle={MAP_CONTAINER_STYLE}
