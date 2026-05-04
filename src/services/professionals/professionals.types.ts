@@ -17,11 +17,11 @@ export type UserProfileResponse = {
   profilePictureUrl?: string; 
   roles: string[];
 };
-
-/** 1.1 Crear Perfil Profesional */
-export type CreateProfessionalProfileRequest = {
-  professionId: UUID;
-};
+export interface CreateProfessionalProfileRequest {
+  professionId: string;
+  lat: number;
+  lng: number;
+}
 
 /** 2.1 Profesiones (Nombres) */
 export type ProfessionName = {
@@ -66,4 +66,47 @@ export type CreateServiceRequest = {
 };
 
 /** 3.3 Actualizar servicio*/
+
 export type UpdateServiceRequest = CreateServiceRequest;
+
+
+export interface ProfessionalPublicDTO {
+  id: string;                       // UUID del profesional (usar para /reservar/:id)
+  firstName: string;
+  lastName: string;
+  profilePictureUrl: string | null;
+  professionName: string;
+  categoryName: string;
+  rating: number;
+  status: string;                  
+  accountStatus: string;            
+  gold: boolean;
+}
+
+/** Estructura de paginación de Spring Boot */
+export interface PageResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;       
+  size: number;         
+  first: boolean;
+  last: boolean;
+  empty: boolean;
+  numberOfElements: number;
+}
+
+export interface ProfessionalDetailPublicDTO {
+  id: string;
+  firstName: string;
+  lastName: string;
+  profilePictureUrl: string | null;
+  professionName: string;
+  categoryName: string;
+  rating: number;
+  status: string;          
+  accountStatus: string;   
+  lat: number;             
+  lng: number;             
+  gold: boolean;
+}

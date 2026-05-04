@@ -23,10 +23,9 @@ import {
   Autocomplete,
 } from '@react-google-maps/api';
 import { AlertCircle, Loader2, MapPin } from 'lucide-react';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from './googleMapsConfig';
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
-
-const LIBRARIES: ('places')[] = ['places'];
 
 const MAP_CONTAINER_STYLE: React.CSSProperties = {
   width: '100%',
@@ -63,15 +62,9 @@ interface GoogleMapPickerProps {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function GoogleMapPicker({ defaultAddress = '', onAddressChange }: GoogleMapPickerProps) {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  const apiKey = GOOGLE_MAPS_LOADER_OPTIONS.googleMapsApiKey;
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'byme-google-maps',
-    googleMapsApiKey: apiKey ?? '',
-    libraries: LIBRARIES,
-    language: 'es',
-    region: 'CO',
-  });
+  const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [center, setCenter] = useState(DEFAULT_CENTER);

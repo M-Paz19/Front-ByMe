@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Calendar, Clock, Star, User, ChevronRight,
+  Calendar, Clock, User, ChevronRight,
   CheckCircle2, XCircle, AlertCircle, MapPin,
   Shield, Camera, LogOut, LayoutDashboard, History, Settings,
   Briefcase, Search, Sparkles, X, Send, PlayCircle, Truck, RefreshCw
@@ -13,10 +13,10 @@ import { useApp } from '../context/AppContext';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 import type { ProfessionName } from '../../services/professionals/professionals.types';
 import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/requests.types';
+import { GoogleMapPicker } from '../components/GoogleMapPicker';
 
 type View = 'overview' | 'history';
 
-// Config visual para los 8 estados del backend
 const STATUS_CONFIG: Record<RequestStatus, {
   label: string;
   icon: any;
@@ -34,7 +34,6 @@ const STATUS_CONFIG: Record<RequestStatus, {
   CANCELADA:  { label: 'Cancelada',    icon: XCircle,      color: 'text-[#6B7280]', bg: 'bg-[#F3F4F6]', border: 'border-[#E5E7EB]' },
 };
 
-// Estados que se consideran "próximos/activos" (aparecen en overview)
 const ACTIVE_STATUSES: RequestStatus[] = ['PENDIENTE', 'ACEPTADA', 'CONFIRMADA', 'EN_CAMINO', 'EN_PROCESO'];
 
 function getApiMsg(err: any): string {
@@ -64,15 +63,18 @@ function BecomeProModal(props: {
   professions: ProfessionName[];
   query: string;
   selectedId: string;
+  lat: number | null;
+  lng: number | null;
   onChangeQuery: (v: string) => void;
   onSelect: (id: string) => void;
+  onLocationChange: (lat: number, lng: number) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
   const {
     open, loading, saving, error, success,
-    professions, query, selectedId,
-    onChangeQuery, onSelect, onClose, onSubmit
+    professions, query, selectedId, lat, lng,
+    onChangeQuery, onSelect, onLocationChange, onClose, onSubmit
   } = props;
 
   const filtered = useMemo(() => {
@@ -85,21 +87,21 @@ function BecomeProModal(props: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-[#E5E7EB]">
-        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-[#E5E7EB]">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-[#E5E7EB] max-h-[90vh] flex flex-col">
+        <div className="flex items-start justify-between gap-4 px-6 py-5 border-b border-[#E5E7EB] flex-shrink-0">
           <div>
             <div className="inline-flex items-center gap-2 bg-[#ECFDF5] text-[#10B981] text-xs font-semibold px-3 py-1 rounded-full mb-3">
               <Briefcase className="w-3.5 h-3.5" /> Perfil Profesional
             </div>
             <h3 className="font-bold text-[#111827] text-lg">Únete como profesional</h3>
             <p className="text-sm text-[#6B7280] mt-1">
-              Selecciona tu profesión para activar tu perfil profesional.
+              Selecciona tu profesión y zona de trabajo para activar tu perfil.
             </p>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[#F3F4F6] transition-colors"
+            className="p-2 rounded-lg hover:bg-[#F3F4F6] transition-colors flex-shrink-0"
             type="button"
             aria-label="Cerrar"
           >
@@ -107,7 +109,8 @@ function BecomeProModal(props: {
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5 overflow-y-auto">
+          {/* Buscar profesión */}
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Buscar profesión</label>
             <div className="relative">
@@ -125,6 +128,7 @@ function BecomeProModal(props: {
             </p>
           </div>
 
+          {/* Lista de profesiones */}
           <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden">
             {loading ? (
               <div className="p-4 space-y-3">
@@ -137,7 +141,7 @@ function BecomeProModal(props: {
                 No hay resultados para <span className="font-semibold">"{query}"</span>.
               </div>
             ) : (
-              <ul className="max-h-72 overflow-auto">
+              <ul className="max-h-56 overflow-auto">
                 {filtered.map((p) => {
                   const active = p.id === selectedId;
                   return (
@@ -166,6 +170,26 @@ function BecomeProModal(props: {
             )}
           </div>
 
+          {/* Ubicación */}
+          <div>
+            <label className="block text-sm font-medium text-[#374151] mb-1">
+              Tu zona de trabajo
+            </label>
+            <p className="text-xs text-[#6B7280] mb-2">
+              Busca una dirección y elige una sugerencia, o haz clic en el mapa.
+            </p>
+            <GoogleMapPicker
+              defaultAddress=""
+              onAddressChange={(_address, latVal, lngVal) => onLocationChange(latVal, lngVal)}
+            />
+            {lat != null && lng != null && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-[#10B981]">
+                <MapPin className="w-3 h-3" />
+                <span>Ubicación seleccionada · {lat.toFixed(4)}, {lng.toFixed(4)}</span>
+              </div>
+            )}
+          </div>
+
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 whitespace-pre-line">
               {error}
@@ -176,34 +200,33 @@ function BecomeProModal(props: {
               {success}
             </div>
           )}
+        </div>
 
-          <div className="flex gap-3 pt-1">
-            <button
-              onClick={onClose}
-              className="flex-1 py-2.5 border border-[#E5E7EB] text-[#374151] rounded-xl text-sm font-medium hover:bg-[#F9FAFB] transition-colors"
-              type="button"
-              disabled={saving}
-            >Cancelar</button>
-            <button
-              onClick={onSubmit}
-              disabled={saving || loading || !selectedId}
-              className="flex-1 py-2.5 bg-[#1E40AF] text-white rounded-xl text-sm font-semibold hover:bg-[#1D3FA0] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-              type="button"
-            >
-              {saving ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <><Sparkles className="w-4 h-4" /> Activar perfil</>
-              )}
-            </button>
-          </div>
+        <div className="flex gap-3 px-6 py-4 border-t border-[#E5E7EB] flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2.5 border border-[#E5E7EB] text-[#374151] rounded-xl text-sm font-medium hover:bg-[#F9FAFB] transition-colors"
+            type="button"
+            disabled={saving}
+          >Cancelar</button>
+          <button
+            onClick={onSubmit}
+            disabled={saving || loading || !selectedId || lat == null || lng == null}
+            className="flex-1 py-2.5 bg-[#1E40AF] text-white rounded-xl text-sm font-semibold hover:bg-[#1D3FA0] disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            type="button"
+          >
+            {saving ? (
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <><Sparkles className="w-4 h-4" /> Activar perfil</>
+            )}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-/** Card de una solicitud individual */
 function RequestCard(props: {
   req: ServiceRequestDTO;
   onConfirm: (id: string) => void;
@@ -215,9 +238,6 @@ function RequestCard(props: {
   const StatusIcon = status.icon;
   const loading = actionLoadingId === req.id;
 
-  // Acciones permitidas por estado para el usuario:
-  // - Confirmar: cuando el profesional ya aceptó y propuso horario
-  // - Cancelar: cualquier estado antes de completarse
   const canConfirm = req.status === 'ACEPTADA';
   const canCancel = ['PENDIENTE', 'ACEPTADA', 'CONFIRMADA'].includes(req.status);
 
@@ -311,7 +331,6 @@ export function UserDashboard() {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
 
-  // === Solicitudes (API real) ===
   const [requests, setRequests] = useState<ServiceRequestDTO[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestsError, setRequestsError] = useState<string | null>(null);
@@ -384,6 +403,8 @@ export function UserDashboard() {
   const [professions, setProfessions] = useState<ProfessionName[]>([]);
   const [proQuery, setProQuery] = useState('');
   const [selectedProfessionId, setSelectedProfessionId] = useState('');
+  const [proLat, setProLat] = useState<number | null>(null);
+  const [proLng, setProLng] = useState<number | null>(null);
   const [proLoading, setProLoading] = useState(false);
   const [proSaving, setProSaving] = useState(false);
   const [proError, setProError] = useState<string | null>(null);
@@ -392,6 +413,8 @@ export function UserDashboard() {
   const openBecomePro = async () => {
     setProError(null);
     setProSuccess(null);
+    setProLat(null);
+    setProLng(null);
     setBecomeProOpen(true);
 
     if (professions.length > 0) return;
@@ -417,9 +440,14 @@ export function UserDashboard() {
       return;
     }
 
+    if (proLat == null || proLng == null) {
+      setProError('Selecciona tu zona de trabajo en el mapa.');
+      return;
+    }
+
     setProSaving(true);
     try {
-      await becomeProfessional(selectedProfessionId);
+      await becomeProfessional(selectedProfessionId, proLat, proLng);
       setProSuccess('Perfil profesional activado. Redirigiendo...');
 
       setTimeout(() => {
@@ -517,7 +545,6 @@ export function UserDashboard() {
                   </button>
                 </div>
 
-                {/* Stats */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Solicitudes activas', value: activeRequests.length, color: '#1E40AF' },
@@ -538,7 +565,6 @@ export function UserDashboard() {
                   </div>
                 )}
 
-                {/* Active requests */}
                 <div className="bg-white rounded-2xl border border-[#E5E7EB]">
                   <div className="flex items-center justify-between px-5 py-4 border-b border-[#F3F4F6]">
                     <h2 className="font-bold text-[#111827]">Solicitudes activas</h2>
@@ -572,7 +598,6 @@ export function UserDashboard() {
                   )}
                 </div>
 
-                {/* Quick actions */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Link to="/buscar" className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-[#E5E7EB] hover:border-[#1E40AF]/30 hover:shadow-md transition-all group">
                     <div className="w-10 h-10 bg-[#EFF6FF] rounded-xl flex items-center justify-center group-hover:bg-[#1E40AF] transition-colors">
@@ -676,8 +701,11 @@ export function UserDashboard() {
         professions={professions}
         query={proQuery}
         selectedId={selectedProfessionId}
+        lat={proLat}
+        lng={proLng}
         onChangeQuery={setProQuery}
         onSelect={setSelectedProfessionId}
+        onLocationChange={(lat, lng) => { setProLat(lat); setProLng(lng); }}
         onClose={() => setBecomeProOpen(false)}
         onSubmit={submitBecomePro}
       />

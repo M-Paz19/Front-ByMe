@@ -1,13 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Eye, EyeOff, Wrench, Mail, Lock, User, Phone, Briefcase, ChevronRight, CheckCircle2, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, Wrench, Mail, Lock, User, Phone, Briefcase, ChevronRight, CheckCircle2, ArrowLeft, MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { IMGS } from '../data/mockData';
 import { decodeJwtPayload, mapRolesToAppRole } from '../../services/auth/jwt';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 import type { ProfessionName } from '../../services/professionals/professionals.types';
-import { useEffect } from "react";
-
+import { GoogleMapPicker } from '../components/GoogleMapPicker';
 
 type AuthView = 'login' | 'register-user' | 'register-pro';
 
@@ -15,7 +14,6 @@ function extractErrorMsg(err: any): string | null {
   const data = err?.response?.data;
   if (!data) return err?.message || null;
   if (typeof data === 'string') return data;
-  // fieldErrors del backend (validaciones de campos)
   if (data.fieldErrors && typeof data.fieldErrors === 'object') {
     const msgs = Object.values(data.fieldErrors).filter(Boolean).join('\n');
     if (msgs) return msgs;
@@ -37,9 +35,14 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
   // Registro profesional en 2 pasos
   const [proStep, setProStep] = useState<'form' | 'select-profession'>('form');
 
-  // Profesiones desde el API (se cargan en paso 2, cuando ya hay token)
+  // Profesiones desde el API
   const [professions, setProfessions] = useState<ProfessionName[]>([]);
   const [professionsLoading, setProfessionsLoading] = useState(false);
+
+  // Coordenadas seleccionadas en el GoogleMapPicker (paso 2)
+  const [proLat, setProLat] = useState<number | null>(null);
+  const [proLng, setProLng] = useState<number | null>(null);
+  const [proAddress, setProAddress] = useState<string>('');
 
   useEffect(() => {
     if (proStep !== 'select-profession') return;
@@ -51,7 +54,8 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
       .finally(() => { if (mounted) setProfessionsLoading(false); });
     return () => { mounted = false; };
   }, [proStep]);
-    useEffect(() => {
+
+  useEffect(() => {
     if (!isLoggedIn) return;
 
     // No redirigir si estamos en el paso 2 del registro profesional
@@ -64,8 +68,8 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
         ? "/panel/profesional"
         : "/panel/usuario";
 
-  navigate(path, { replace: true });
-}, [isLoggedIn, role, navigate, view, proStep]);
+    navigate(path, { replace: true });
+  }, [isLoggedIn, role, navigate, view, proStep]);
 
   const goToDashboard = () => {
     const token = localStorage.getItem('token');
@@ -91,8 +95,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
       if (msg && !authError) setFormError(msg);
     }
   };
-
-  
 
   const handleRegisterUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -185,7 +187,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
         confirmPassword,
       });
 
-      // Registro exitoso → pasar al paso 2 (ahora ya tenemos token)
       setProStep('select-profession');
     } catch (err: any) {
       const msg = extractErrorMsg(err);
@@ -193,7 +194,7 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
     }
   };
 
-  // Paso 2: Seleccionar profesión y crear perfil profesional
+  // Paso 2: Seleccionar profesión + ubicación y crear perfil profesional
   const handleSelectProfession = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setFormError(null);
@@ -205,10 +206,16 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
       return;
     }
 
+    if (proLat == null || proLng == null) {
+      setFormError('Selecciona tu ubicación de trabajo en el mapa. Escribe una dirección y elige una sugerencia, o haz clic en el mapa.');
+      return;
+    }
+
     try {
-      await becomeProfessional(professionId);
+      await becomeProfessional(professionId, proLat, proLng);
       goToDashboard();
     } catch {
+      // El error ya quedó en authError
     }
   };
 
@@ -254,7 +261,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
                 <span className="text-white/80 text-sm">{item}</span>
               </div>
             ))}
-            {/* Mini professional card */}
             <div className="mt-6 bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
               <div className="flex items-center gap-3">
                 <img src={IMGS.man1} alt="" className="w-10 h-10 rounded-full object-cover" />
@@ -270,7 +276,7 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
       </div>
 
       {/* Right form panel */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-white">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-white overflow-y-auto">
         <div className="w-full max-w-sm">
           <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-[#6B7280] hover:text-[#111827] mb-6 transition-colors">
             <ArrowLeft className="w-3.5 h-3.5" /> Volver al inicio
@@ -465,12 +471,12 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
                   <Briefcase className="w-3.5 h-3.5" /> Cuenta Profesional
                 </div>
                 <h1 className="text-2xl font-bold text-[#111827]">
-                  {proStep === 'form' ? 'Únete como profesional' : 'Selecciona tu profesión'}
+                  {proStep === 'form' ? 'Únete como profesional' : 'Profesión y ubicación'}
                 </h1>
                 <p className="text-[#6B7280] mt-1">
                   {proStep === 'form'
                     ? 'Paso 1 de 2 — Crea tu cuenta'
-                    : 'Paso 2 de 2 — Elige tu especialidad'}
+                    : 'Paso 2 de 2 — Elige tu especialidad y zona de trabajo'}
                 </p>
               </div>
 
@@ -478,80 +484,80 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
               {proStep === 'form' && (
                 <>
                   <form onSubmit={handleRegisterPro} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Nombre</label>
-                    <input name="firstName" type="text" placeholder="Carlos" required className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#374151] mb-1.5">Apellido</label>
-                    <input name="lastName" type="text" placeholder="Ramírez" required className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Correo electrónico</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
-                    <input name="email" type="email" placeholder="carlos@email.com" required className="w-full pl-10 pr-4 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Teléfono</label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
-                    <input name="phone" type="tel" placeholder="+57 310 000 0000" className="w-full pl-10 pr-4 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" required />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Dirección</label>
-                  <input name="address" type="text" placeholder="Calle Falsa 123" className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Edad</label>
-                  <input name="age" type="number" min={1} max={120} placeholder="30" className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Contraseña</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
-                    <input name="password" type={showPass ? 'text' : 'password'} placeholder="Mínimo 8 caracteres" required className="w-full pl-10 pr-10 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
-                    <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2">
-                      {showPass ? <EyeOff className="w-4 h-4 text-[#9CA3AF]" /> : <Eye className="w-4 h-4 text-[#9CA3AF]" />}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Nombre</label>
+                        <input name="firstName" type="text" placeholder="Carlos" required className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#374151] mb-1.5">Apellido</label>
+                        <input name="lastName" type="text" placeholder="Ramírez" required className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Correo electrónico</label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+                        <input name="email" type="email" placeholder="carlos@email.com" required className="w-full pl-10 pr-4 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Teléfono</label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+                        <input name="phone" type="tel" placeholder="+57 310 000 0000" className="w-full pl-10 pr-4 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" required />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Dirección</label>
+                      <input name="address" type="text" placeholder="Calle Falsa 123" className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Edad</label>
+                      <input name="age" type="number" min={1} max={120} placeholder="30" className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Contraseña</label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+                        <input name="password" type={showPass ? 'text' : 'password'} placeholder="Mínimo 8 caracteres" required className="w-full pl-10 pr-10 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2">
+                          {showPass ? <EyeOff className="w-4 h-4 text-[#9CA3AF]" /> : <Eye className="w-4 h-4 text-[#9CA3AF]" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">Confirmar contraseña</label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
+                        <input name="confirmPassword" type={showPass ? 'text' : 'password'} placeholder="Repite tu contraseña" required className="w-full pl-10 pr-10 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full bg-[#10B981] hover:bg-[#0EA875] text-white py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                    >
+                      {authLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Continuar <ChevronRight className="w-4 h-4" /></>}
                     </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Confirmar contraseña</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9CA3AF]" />
-                    <input name="confirmPassword" type={showPass ? 'text' : 'password'} placeholder="Repite tu contraseña" required className="w-full pl-10 pr-10 py-2.5 border border-[#E5E7EB] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] transition-all" />
-                  </div>
-                </div>
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full bg-[#10B981] hover:bg-[#0EA875] text-white py-3 rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-                >
-                  {authLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <>Continuar <ChevronRight className="w-4 h-4" /></>}
-                </button>
-              </form>
-              <p className="text-center text-sm text-[#6B7280] mt-5">
-                ¿Ya tienes cuenta?{' '}
-                <button onClick={() => setView('login')} className="text-[#1E40AF] font-medium hover:underline">Iniciar sesión</button>
-              </p>
+                  </form>
+                  <p className="text-center text-sm text-[#6B7280] mt-5">
+                    ¿Ya tienes cuenta?{' '}
+                    <button onClick={() => setView('login')} className="text-[#1E40AF] font-medium hover:underline">Iniciar sesión</button>
+                  </p>
                 </>
               )}
 
-              {/* ── PASO 2: Seleccionar profesión ── */}
+              {/* ── PASO 2: Seleccionar profesión + ubicación ── */}
               {proStep === 'select-profession' && (
                 <>
                   <div className="p-4 bg-[#ECFDF5] rounded-xl border border-[#10B981]/20 mb-5">
                     <p className="text-sm text-[#10B981] flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" /> Cuenta creada exitosamente. Ahora selecciona tu profesión.
+                      <CheckCircle2 className="w-4 h-4" /> Cuenta creada exitosamente.
                     </p>
                   </div>
 
-                  <form onSubmit={handleSelectProfession} className="space-y-4">
+                  <form onSubmit={handleSelectProfession} className="space-y-5">
                     <div>
                       <label className="block text-sm font-medium text-[#374151] mb-1.5">Especialidad principal</label>
                       <select name="professionId" required className="w-full px-3 py-2.5 border border-[#E5E7EB] rounded-xl text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#10B981]/20 focus:border-[#10B981] bg-white transition-all">
@@ -563,6 +569,30 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
                         ))}
                       </select>
                     </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                        Tu zona de trabajo
+                      </label>
+                      <p className="text-xs text-[#6B7280] mb-2">
+                        Busca una dirección y elige una sugerencia, o haz clic en el mapa para ajustar el pin.
+                      </p>
+                      <GoogleMapPicker
+                        defaultAddress=""
+                        onAddressChange={(address, lat, lng) => {
+                          setProAddress(address);
+                          setProLat(lat);
+                          setProLng(lng);
+                        }}
+                      />
+                      {proLat != null && proLng != null && (
+                        <div className="mt-2 flex items-center gap-1.5 text-xs text-[#10B981]">
+                          <MapPin className="w-3 h-3" />
+                          <span>Ubicación seleccionada · {proLat.toFixed(4)}, {proLng.toFixed(4)}</span>
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       type="submit"
                       disabled={authLoading || professionsLoading}

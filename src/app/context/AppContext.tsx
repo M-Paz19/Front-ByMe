@@ -10,6 +10,7 @@ export type DemoRole = "visitor" | "usuario" | "profesional" | "admin";
 
 export interface AuthUser {
   id?: string;
+  professionalId?: string;
   email?: string;
   firstName?: string;
   lastName?: string;
@@ -36,7 +37,11 @@ interface AppContextType {
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: UpdateProfileRequest, file?: File | null) => Promise<void>;
-  becomeProfessional: (professionId: string) => Promise<void>;
+  /**
+   * Convierte la cuenta actual en perfil profesional.
+   * Requiere `professionId` y coordenadas geográficas (lat/lng).
+   */
+  becomeProfessional: (professionId: string, lat: number, lng: number) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType>({
@@ -121,10 +126,11 @@ function extractPhotoUrl(profile: any): string | null {
   return null;
 }
 
-function mapUserFromProfile(profile: UserProfileResponse, fallback?: AuthUser | null): AuthUser {
+function mapUserFromProfile(profile: UserProfileResponse | any, fallback?: AuthUser | null): AuthUser {
   return {
     ...fallback,
     id: profile.id ?? fallback?.id,
+    professionalId: profile.professionalId ?? fallback?.professionalId,
     email: profile.email ?? fallback?.email,
     firstName: profile.firstName ?? fallback?.firstName,
     lastName: profile.lastName ?? fallback?.lastName,
@@ -175,7 +181,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return userPhotoOverride || user?.photoUrl || ROLE_DATA[role].userPhoto || "";
   }, [userPhotoOverride, user?.photoUrl, role]);
 
-  // Hidratar perfil (y foto) al cargar
   useEffect(() => {
     let mounted = true;
 
@@ -187,7 +192,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setUser((prev) => mapUserFromProfile(profile, prev));
 
-        // Sincronizar el role del contexto con los roles del profile
         if (profile.roles && Array.isArray(profile.roles)) {
           setRole(mapRolesToAppRole(profile.roles));
         }
@@ -303,12 +307,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const becomeProfessional = async (professionId: string) => {
+  const becomeProfessional = async (professionId: string, lat: number, lng: number) => {
     setAuthLoading(true);
     setAuthError(null);
 
     try {
-      const res = await ProfessionalsService.createProfessionalProfile({ professionId });
+      const res = await ProfessionalsService.createProfessionalProfile({
+        professionId,
+        lat,
+        lng,
+      });
 
       // El endpoint devuelve un nuevo token con rol PROFESSIONAL
       const newToken = res.token;
@@ -327,6 +335,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           lastName: payload?.lastName ?? prev?.lastName,
           roles: payload?.roles ?? prev?.roles,
         }));
+
+        // Refrescar el profile completo para obtener el nuevo professionalId
+        try {
+          const fresh = await AuthService.getProfile();
+          setUser((prev) => mapUserFromProfile(fresh, prev));
+        } catch {
+          // si falla, no es crítico — el siguiente hydrate lo capturará
+        }
       }
     } catch (err: any) {
       setAuthError(extractApiErrorMessage(err, "No se pudo crear el perfil profesional."));

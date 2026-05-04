@@ -3,17 +3,17 @@ import { Link, useSearchParams } from 'react-router';
 import {
   Search, MapPin, Star, SlidersHorizontal, X, Map,
   List, Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound,
-  Leaf, Wind, Truck, Bug, Clock, Award, Wrench
+  Leaf, Wind, Truck, Bug, Award, Wrench, ChevronLeft, ChevronRight, RefreshCw
 } from 'lucide-react';
-import { professionals, categories as mockCategories } from '../data/mockData';
+import { categories as mockCategories, IMGS } from '../data/mockData';
 import { RealMap } from '../components/RealMap';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
+import type { ProfessionalPublicDTO } from '../../services/professionals/professionals.types';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck, Bug,
 };
 
-// Mapa visual por nombre de categoría (mismo que Landing)
 const CATEGORY_VISUAL: Record<string, { iconName: string; color: string; bgColor: string }> = {
   'Plomería':       { iconName: 'Droplets',    color: '#1E40AF', bgColor: '#EFF6FF' },
   'Electricidad':   { iconName: 'Zap',         color: '#D97706', bgColor: '#FFFBEB' },
@@ -28,22 +28,85 @@ const CATEGORY_VISUAL: Record<string, { iconName: string; color: string; bgColor
   'Tecnología':     { iconName: 'Zap',         color: '#6366F1', bgColor: '#EEF2FF' },
 };
 
-const SORT_OPTIONS = ['Relevancia', 'Mejor calificación', 'Más cercano', 'Menor precio', 'Más reseñas'];
+const SORT_OPTIONS = ['Relevancia', 'Mejor calificación', 'Más reseñas'];
+
+const FALLBACK_PHOTOS = [IMGS.man1, IMGS.man2, IMGS.woman1].filter(Boolean);
+function getFallbackPhoto(id: string): string {
+  if (FALLBACK_PHOTOS.length === 0) return '';
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i)) % FALLBACK_PHOTOS.length;
+  return FALLBACK_PHOTOS[hash];
+}
+
+function slugify(s: string): string {
+  return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-');
+}
+
+interface DisplayProfessional {
+  id: string;
+  name: string;
+  specialty: string;
+  category: string;
+  photo: string;
+  rating: number;
+  reviewCount: number;
+  available: boolean;
+  badge: string | null;
+  shortDescription: string;
+  distance: string;
+  hourlyRate: number;
+  responseTime: string;
+  lat?: number;
+  lng?: number;
+  address?: string;
+}
+
+function mapToDisplay(p: ProfessionalPublicDTO, index: number): DisplayProfessional {
+  const fullName = `${p.firstName} ${p.lastName}`.trim();
+  const baseLat = 2.4419;
+  const baseLng = -76.6065;
+  const offset = (index % 10) * 0.003;
+  const offsetLng = ((index * 7) % 10) * 0.003;
+
+  return {
+    id: p.id,
+    name: fullName || 'Profesional',
+    specialty: p.professionName || '—',
+    category: slugify(p.categoryName || ''),
+    photo: p.profilePictureUrl || getFallbackPhoto(p.id),
+    rating: p.rating || 0,
+    reviewCount: 0,
+    available: p.status === 'DISPONIBLE',
+    badge: p.gold ? 'Top profesional' : (p.accountStatus === 'VERIFICADO' ? 'Verificado' : null),
+    shortDescription: `${p.professionName || ''} · ${p.categoryName || ''}`,
+    distance: '—',
+    hourlyRate: 0,
+    responseTime: 'Pronto',
+    lat: baseLat + offset - 0.015,
+    lng: baseLng + offsetLng - 0.015,
+  };
+}
 
 export function SearchPage() {
   const [params] = useSearchParams();
   const [search, setSearch] = useState(params.get('q') || '');
   const [selectedCat, setSelectedCat] = useState(params.get('cat') || 'all');
   const [minRating, setMinRating] = useState(0);
-  const [maxDistance, setMaxDistance] = useState(10);
   const [sortBy, setSortBy] = useState('Relevancia');
   const [availableOnly, setAvailableOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<'list' | 'map'>('list');
   const [filterOpen, setFilterOpen] = useState(false);
 
-  // Categorías: inicia con mock, reemplaza con datos del API
   const [categories, setCategories] = useState(mockCategories);
+
+  const [pros, setPros] = useState<ProfessionalPublicDTO[]>([]);
+  const [page, setPage] = useState(0);
+  const [size] = useState(12);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -53,7 +116,7 @@ export function SearchPage() {
         const mapped = apiCats.map((c) => {
           const vis = CATEGORY_VISUAL[c.name] || { iconName: 'Wrench', color: '#6B7280', bgColor: '#F3F4F6' };
           return {
-            id: c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-'),
+            id: slugify(c.name),
             name: c.name,
             iconName: vis.iconName,
             color: vis.color,
@@ -67,34 +130,68 @@ export function SearchPage() {
     return () => { mounted = false; };
   }, []);
 
-  const filtered = useMemo(() => {
-    return professionals.filter(p => {
-      const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) ||
-        p.specialty.toLowerCase().includes(search.toLowerCase()) ||
-        p.shortDescription.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    setError(null);
+
+    ProfessionalsService.getPublicList(page, size)
+      .then((res) => {
+        if (!mounted) return;
+        setPros(res.content || []);
+        setTotalPages(res.totalPages || 0);
+        setTotalElements(res.totalElements || 0);
+      })
+      .catch((e) => {
+        if (mounted) setError(e?.response?.data?.message || 'No se pudieron cargar los profesionales.');
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => { mounted = false; };
+  }, [page, size]);
+
+  const filtered: DisplayProfessional[] = useMemo(() => {
+    const display = pros.map((p, i) => mapToDisplay(p, i));
+
+    return display.filter(p => {
+      const q = search.toLowerCase().trim();
+      const matchSearch = !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.specialty.toLowerCase().includes(q) ||
+        p.shortDescription.toLowerCase().includes(q);
       const matchCat = selectedCat === 'all' || p.category === selectedCat;
       const matchRating = p.rating >= minRating;
-      const matchDist = parseFloat(p.distance) <= maxDistance;
       const matchAvail = !availableOnly || p.available;
-      return matchSearch && matchCat && matchRating && matchDist && matchAvail;
+      return matchSearch && matchCat && matchRating && matchAvail;
     }).sort((a, b) => {
       if (sortBy === 'Mejor calificación') return b.rating - a.rating;
-      if (sortBy === 'Más cercano') return parseFloat(a.distance) - parseFloat(b.distance);
-      if (sortBy === 'Menor precio') return a.hourlyRate - b.hourlyRate;
       if (sortBy === 'Más reseñas') return b.reviewCount - a.reviewCount;
       return 0;
     });
-  }, [search, selectedCat, minRating, maxDistance, sortBy, availableOnly]);
+  }, [pros, search, selectedCat, minRating, sortBy, availableOnly]);
 
-  const selectedPro = professionals.find(p => p.id === selectedId);
+  const selectedPro = filtered.find(p => p.id === selectedId);
+
+  const reload = () => {
+    setLoading(true);
+    ProfessionalsService.getPublicList(page, size)
+      .then((res) => {
+        setPros(res.content || []);
+        setTotalPages(res.totalPages || 0);
+        setTotalElements(res.totalElements || 0);
+        setError(null);
+      })
+      .catch((e) => setError(e?.response?.data?.message || 'No se pudieron cargar los profesionales.'))
+      .finally(() => setLoading(false));
+  };
 
   return (
     <div className="flex flex-col h-screen pt-16" style={{ fontFamily: "'Inter', sans-serif" }}>
-      {/* Top search bar */}
       <div className="bg-white border-b border-[#E5E7EB] px-4 py-4 flex-shrink-0 shadow-sm">
         <div className="max-w-7xl mx-auto flex items-center gap-4">
 
-          {/* Search input */}
           <div className="flex-1 flex items-center gap-3 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 hover:border-[#1E40AF]/40 focus-within:border-[#1E40AF] focus-within:ring-2 focus-within:ring-[#1E40AF]/10 transition-all">
             <Search className="w-5 h-5 text-[#9CA3AF] flex-shrink-0" />
             <input
@@ -111,16 +208,13 @@ export function SearchPage() {
             )}
           </div>
 
-          {/* Location pill */}
           <div className="hidden md:flex items-center gap-2.5 bg-[#F9FAFB] border border-[#E5E7EB] rounded-2xl px-4 py-3 min-w-[180px] hover:border-[#1E40AF]/40 transition-all cursor-pointer">
             <MapPin className="w-4 h-4 text-[#1E40AF] flex-shrink-0" />
             <span className="text-sm text-[#374151] font-medium whitespace-nowrap">Popayán, Cauca</span>
           </div>
 
-          {/* Divider */}
           <div className="hidden md:block w-px h-8 bg-[#E5E7EB]" />
 
-          {/* Filter button */}
           <button
             onClick={() => setFilterOpen(!filterOpen)}
             className={`flex items-center gap-2 px-4 py-3 rounded-2xl border font-medium transition-all whitespace-nowrap ${
@@ -131,12 +225,11 @@ export function SearchPage() {
           >
             <SlidersHorizontal className="w-4 h-4" />
             <span className="hidden sm:inline text-sm">Filtros</span>
-            {(minRating > 0 || maxDistance < 10 || availableOnly) && (
+            {(minRating > 0 || availableOnly) && (
               <span className="w-2 h-2 rounded-full bg-[#10B981]" />
             )}
           </button>
 
-          {/* Sort dropdown (desktop) */}
           <div className="hidden lg:flex items-center gap-2 bg-white border border-[#E5E7EB] rounded-2xl px-4 py-3 hover:border-[#D1D5DB] transition-all">
             <span className="text-sm text-[#9CA3AF] whitespace-nowrap">Ordenar:</span>
             <select
@@ -148,7 +241,6 @@ export function SearchPage() {
             </select>
           </div>
 
-          {/* Mobile view toggle */}
           <div className="flex lg:hidden border border-[#E5E7EB] rounded-2xl overflow-hidden">
             <button
               onClick={() => setMobileView('list')}
@@ -165,10 +257,8 @@ export function SearchPage() {
           </div>
         </div>
 
-        {/* Filters row */}
         {filterOpen && (
           <div className="max-w-7xl mx-auto mt-3 pt-3 border-t border-[#E5E7EB] flex flex-wrap items-center gap-3">
-            {/* Category pills */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
               <button
                 onClick={() => setSelectedCat('all')}
@@ -196,7 +286,6 @@ export function SearchPage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap ml-auto">
-              {/* Rating filter */}
               <select
                 value={minRating}
                 onChange={e => setMinRating(Number(e.target.value))}
@@ -208,7 +297,6 @@ export function SearchPage() {
                 <option value={4.8}>⭐ 4.8+ estrellas</option>
               </select>
 
-              {/* Available only */}
               <label className="flex items-center gap-2 cursor-pointer">
                 <div
                   onClick={() => setAvailableOnly(!availableOnly)}
@@ -219,7 +307,6 @@ export function SearchPage() {
                 <span className="text-sm text-[#374151]">Solo disponibles</span>
               </label>
 
-              {/* Sort */}
               <select
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value)}
@@ -232,31 +319,64 @@ export function SearchPage() {
         )}
       </div>
 
-      {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Professional list */}
         <div className={`w-full lg:w-[420px] xl:w-[480px] flex flex-col overflow-hidden bg-[#F9FAFB] border-r border-[#E5E7EB] ${
           mobileView === 'map' ? 'hidden lg:flex' : 'flex'
         }`}>
-          {/* Results count */}
           <div className="px-4 py-3 flex items-center justify-between bg-white border-b border-[#E5E7EB] flex-shrink-0">
             <span className="text-sm font-medium text-[#374151]">
-              <span className="text-[#111827] font-bold">{filtered.length}</span> profesionales encontrados
+              <span className="text-[#111827] font-bold">{loading ? '...' : filtered.length}</span> en esta página
+              {totalElements > 0 && (
+                <span className="text-[#9CA3AF]"> · {totalElements} en total</span>
+              )}
             </span>
-            {selectedCat !== 'all' && (
-              <button onClick={() => setSelectedCat('all')} className="flex items-center gap-1 text-xs text-[#1E40AF] hover:underline">
-                <X className="w-3 h-3" /> Limpiar filtros
+            <div className="flex items-center gap-2">
+              {selectedCat !== 'all' && (
+                <button onClick={() => setSelectedCat('all')} className="flex items-center gap-1 text-xs text-[#1E40AF] hover:underline">
+                  <X className="w-3 h-3" /> Limpiar
+                </button>
+              )}
+              <button
+                onClick={reload}
+                disabled={loading}
+                className="flex items-center gap-1 text-xs text-[#6B7280] hover:text-[#1E40AF] disabled:opacity-50"
+                aria-label="Refrescar"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               </button>
-            )}
+            </div>
           </div>
 
-          {/* List */}
+          {error && (
+            <div className="m-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+              {error}
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <>
+                {[1,2,3,4].map(i => (
+                  <div key={i} className="bg-white rounded-2xl border border-[#E5E7EB] p-4 animate-pulse">
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-[#F3F4F6]" />
+                      <div className="w-14 h-14 rounded-xl bg-[#F3F4F6]" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-[#F3F4F6] rounded w-3/4" />
+                        <div className="h-3 bg-[#F3F4F6] rounded w-1/2" />
+                        <div className="h-3 bg-[#F3F4F6] rounded w-2/3" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <Search className="w-12 h-12 text-[#D1D5DB] mb-3" />
                 <p className="text-[#374151] font-medium">No encontramos resultados</p>
-                <p className="text-sm text-[#9CA3AF] mt-1">Intenta con otros filtros</p>
+                <p className="text-sm text-[#9CA3AF] mt-1">
+                  {pros.length === 0 ? 'No hay profesionales disponibles' : 'Intenta con otros filtros'}
+                </p>
               </div>
             ) : (
               filtered.map((prof, index) => (
@@ -271,24 +391,21 @@ export function SearchPage() {
                 >
                   <div className="p-4">
                     <div className="flex items-start gap-3">
-                      {/* Number badge */}
                       <div className="w-6 h-6 rounded-full bg-[#1E40AF] text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-1">
                         {index + 1}
                       </div>
 
-                      {/* Photo */}
                       <img
                         src={prof.photo}
                         alt={prof.name}
                         className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
                       />
 
-                      {/* Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <h3 className="font-semibold text-[#111827] text-sm">{prof.name}</h3>
-                            <p className="text-xs text-[#6B7280]">{prof.specialty}</p>
+                          <div className="min-w-0">
+                            <h3 className="font-semibold text-[#111827] text-sm truncate">{prof.name}</h3>
+                            <p className="text-xs text-[#6B7280] truncate">{prof.specialty}</p>
                           </div>
                           <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs flex-shrink-0 ${
                             prof.available ? 'bg-[#ECFDF5] text-[#10B981]' : 'bg-[#FEF2F2] text-[#EF4444]'
@@ -300,11 +417,7 @@ export function SearchPage() {
 
                         <div className="flex items-center gap-1 mt-1.5">
                           <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                          <span className="text-xs font-medium text-[#374151]">{prof.rating}</span>
-                          <span className="text-xs text-[#9CA3AF]">({prof.reviewCount})</span>
-                          <span className="text-[#E5E7EB] mx-1">·</span>
-                          <MapPin className="w-3 h-3 text-[#9CA3AF]" />
-                          <span className="text-xs text-[#9CA3AF]">{prof.distance}</span>
+                          <span className="text-xs font-medium text-[#374151]">{prof.rating.toFixed(1)}</span>
                         </div>
 
                         {prof.badge && (
@@ -318,19 +431,8 @@ export function SearchPage() {
                     <p className="text-xs text-[#6B7280] mt-3 line-clamp-2 leading-relaxed">
                       {prof.shortDescription}
                     </p>
-
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#F3F4F6]">
-                      <div className="flex items-center gap-1 text-xs text-[#9CA3AF]">
-                        <Clock className="w-3 h-3" />
-                        <span>{prof.responseTime}</span>
-                      </div>
-                      <span className="text-sm font-bold text-[#1E40AF]">
-                        ${prof.hourlyRate.toLocaleString()}/hr
-                      </span>
-                    </div>
                   </div>
 
-                  {/* Expanded actions */}
                   {selectedId === prof.id && (
                     <div className="px-4 pb-4 flex gap-2">
                       <Link
@@ -353,17 +455,37 @@ export function SearchPage() {
               ))
             )}
           </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-[#E5E7EB] flex-shrink-0">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0 || loading}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-4 h-4" /> Anterior
+              </button>
+              <span className="text-sm text-[#6B7280]">
+                Página {page + 1} de {totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1 || loading}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-[#F9FAFB] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Siguiente <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Right: Map */}
         <div className={`flex-1 relative ${mobileView === 'list' ? 'hidden lg:block' : 'block'}`}>
           <RealMap
-            professionals={filtered}
+            professionals={filtered as any}
             selectedId={selectedId}
-            onSelect={id => setSelectedId(selectedId === id ? null : id)}
+            onSelect={(id: string) => setSelectedId(selectedId === id ? null : id)}
           />
 
-          {/* Selected pro detail card */}
           {selectedPro && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-80 bg-white rounded-2xl shadow-2xl border border-[#E5E7EB] p-4 z-20">
               <div className="flex items-start gap-3">
@@ -380,9 +502,7 @@ export function SearchPage() {
                   </div>
                   <div className="flex items-center gap-1 mt-1">
                     <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                    <span className="text-xs font-medium text-[#374151]">{selectedPro.rating}</span>
-                    <span className="text-xs text-[#9CA3AF]">({selectedPro.reviewCount})</span>
-                    <span className="text-xs text-[#10B981] ml-1">{selectedPro.distance}</span>
+                    <span className="text-xs font-medium text-[#374151]">{selectedPro.rating.toFixed(1)}</span>
                   </div>
                 </div>
               </div>

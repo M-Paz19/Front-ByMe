@@ -34,9 +34,22 @@ function sanitize<T extends Record<string, any>>(obj: T): Partial<T> {
   ) as Partial<T>;
 }
 
+/**
+ * Rutas absolutas con prefijo /auth/ para que funcionen sin importar
+ * qué tenga `baseURL` el axios `api`.
+ *
+ * Endpoints según la documentación del backend:
+ *   POST /auth/register
+ *   POST /auth/login
+ *   POST /auth/logout
+ *   GET  /auth/profile
+ *   PUT  /auth/update-profile  ← (no /auth/profile)
+ */
 export class AuthService {
   static async register(data: RegisterRequest): Promise<void> {
-    await api.post("/auth/register", data);
+    await api.post("/auth/register", data, {
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   static async login(data: LoginRequest): Promise<LoginSession> {
@@ -53,12 +66,12 @@ export class AuthService {
     await api.post("/auth/logout");
   }
 
-  static async getProfile() {
+  static async getProfile(): Promise<UserProfileResponse> {
     const res = await api.get("/auth/profile");
-    return res.data;
+    return res.data as UserProfileResponse;
   }
 
-  static async updateProfile(request: UpdateProfileRequest, file?: File | null) {
+  static async updateProfile(request: UpdateProfileRequest, file?: File | null): Promise<UserProfileResponse> {
     const cleaned = sanitize({
       firstName: request.firstName,
       lastName: request.lastName,
@@ -66,17 +79,17 @@ export class AuthService {
       address: request.address,
       age: request.age,
     });
+
     const form = new FormData();
-    const jsonFile = new File([JSON.stringify(cleaned)], "request.json", { type: "application/json" });
+    const jsonFile = new File([JSON.stringify(cleaned)], "request.json", {
+      type: "application/json",
+    });
     form.append("request", jsonFile);
     if (file) form.append("file", file, file.name);
 
-    const res = await api.put("/auth/profile", form, {
+    const res = await api.put("/auth/update-profile", form, {
       headers: { Accept: "application/json" },
     });
     return res.data as UserProfileResponse;
   }
-
-  
-
 }

@@ -1,22 +1,33 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import {
   ChevronLeft, ChevronRight, Calendar, Clock, MapPin, CheckCircle2,
   FileText, Star, Shield, Briefcase, Sun, Moon
 } from 'lucide-react';
-import { professionals } from '../data/mockData';
+import { IMGS } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 import { ServiceRequestsService } from '../../services/requests/requests.service';
-import type { ServiceDetailDTO } from '../../services/professionals/professionals.types';
+import type {
+  ServiceDetailDTO,
+  ProfessionalDetailPublicDTO,
+} from '../../services/professionals/professionals.types';
 import type { Workday, ServiceRequestDTO } from '../../services/requests/requests.types';
 
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-// Coordenadas por defecto (Popayán centro) — se reemplazarán cuando tengamos el mapa
+// Coordenadas por defecto (Popayán centro) — fallback si el profesional no las tiene
 const DEFAULT_LAT = 2.4419;
 const DEFAULT_LNG = -76.6065;
+
+const FALLBACK_PHOTOS = [IMGS.man1, IMGS.man2, IMGS.woman1].filter(Boolean);
+function getFallbackPhoto(id: string): string {
+  if (FALLBACK_PHOTOS.length === 0) return '';
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i)) % FALLBACK_PHOTOS.length;
+  return FALLBACK_PHOTOS[hash];
+}
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -47,57 +58,62 @@ export function BookingPage() {
   const navigate = useNavigate();
   const { isLoggedIn } = useApp();
 
-  // Fallback visual (nombre/foto del profesional) — mientras no exista GET /professionals/{id}
-  const profMock = professionals.find(p => p.id === professionalIdFromRoute) || professionals[0];
-
-  // === State ===
   const today = new Date();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
-  // Step 1: servicio
+  // === Profesional (datos reales del API) ===
+  const [professional, setProfessional] = useState<ProfessionalDetailPublicDTO | null>(null);
+  const [profLoading, setProfLoading] = useState(true);
+  const [profError, setProfError] = useState<string | null>(null);
+
+  // === Servicios ===
   const [services, setServices] = useState<ServiceDetailDTO[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState<ServiceDetailDTO | null>(null);
 
-  // Step 2: fecha + jornada
+  // === Fecha + jornada ===
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<{ y: number; m: number; d: number } | null>(null);
   const [workday, setWorkday] = useState<Workday | null>(null);
 
-  // Step 4: envío
+  // === Submit ===
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [createdRequest, setCreatedRequest] = useState<ServiceRequestDTO | null>(null);
 
-  // Redirigir si no ha iniciado sesión
+  // Redirigir si no está logueado
   useEffect(() => {
     if (!isLoggedIn) {
-      navigate('/login', { state: { from: `/reservar/${professionalIdFromRoute}` } });
+      navigate('/login', { state: { from: `/agendar/${professionalIdFromRoute}` } });
     }
   }, [isLoggedIn, navigate, professionalIdFromRoute]);
 
-  // Cargar servicios del profesional al montar
+  // Cargar datos del profesional
   useEffect(() => {
     if (!professionalIdFromRoute) return;
 
-    // Si el id de la ruta no parece UUID, es un mock — usa los servicios mock
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(professionalIdFromRoute);
     if (!isUuid) {
-      // Mapear servicios mock al formato ServiceDetailDTO
-      const mockServices: ServiceDetailDTO[] = profMock.services.map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        description: s.duration || '',
-        basePrice: s.price,
-        estimatedDurationHours: 1,
-        professionalId: profMock.id,
-      }));
-      setServices(mockServices);
-      if (mockServices.length > 0) setSelectedService(mockServices[0]);
+      setProfError('ID de profesional inválido.');
+      setProfLoading(false);
       return;
     }
+
+    setProfLoading(true);
+    setProfError(null);
+    ProfessionalsService.getPublicById(professionalIdFromRoute)
+      .then((data) => setProfessional(data))
+      .catch((e) => setProfError(getApiMsg(e)))
+      .finally(() => setProfLoading(false));
+  }, [professionalIdFromRoute]);
+
+  // Cargar servicios del profesional
+  useEffect(() => {
+    if (!professionalIdFromRoute) return;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(professionalIdFromRoute);
+    if (!isUuid) return;
 
     setServicesLoading(true);
     setServicesError(null);
@@ -108,8 +124,18 @@ export function BookingPage() {
       })
       .catch((e) => setServicesError(getApiMsg(e)))
       .finally(() => setServicesLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [professionalIdFromRoute]);
+
+  // Datos derivados del profesional
+  const profName = professional ? `${professional.firstName} ${professional.lastName}`.trim() : 'Cargando…';
+  const profPhoto = professional?.profilePictureUrl || (professional ? getFallbackPhoto(professional.id) : '');
+  const profSpecialty = professional?.professionName || '';
+  const profRating = professional?.rating || 0;
+
+  // Coordenadas del profesional — el backend los tiene invertidos:
+  // ⚠ `lat` contiene longitud, `lng` contiene latitud (reportar al backend)
+  const profLat = professional?.lng ?? DEFAULT_LAT;
+  const profLng = professional?.lat ?? DEFAULT_LNG;
 
   const daysInMonth = getDaysInMonth(viewYear, viewMonth);
   const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
@@ -134,7 +160,6 @@ export function BookingPage() {
   const handleConfirm = async () => {
     if (!selectedService || !selectedDate || !workday || !professionalIdFromRoute) return;
 
-    // Validar que el profesionalId del servicio sea un UUID real (no mock)
     const proId = selectedService.professionalId || professionalIdFromRoute;
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(proId);
     if (!isUuid) {
@@ -151,8 +176,8 @@ export function BookingPage() {
         serviceId: selectedService.id,
         scheduledDate: scheduledDateISO,
         workday,
-        latitude: DEFAULT_LAT,
-        longitude: DEFAULT_LNG,
+        latitude: profLat,
+        longitude: profLng,
         serviceName: selectedService.name,
         servicePrice: Number(selectedService.basePrice),
       });
@@ -173,8 +198,29 @@ export function BookingPage() {
     { n: 4, label: 'Listo' },
   ];
 
+  // === VISTA: profesional no encontrado ===
+  if (profError) {
+    return (
+      <div className="min-h-screen bg-[#F9FAFB] pt-16 flex items-center justify-center p-6" style={{ fontFamily: "'Inter', sans-serif" }}>
+        <div className="bg-white rounded-3xl border border-[#E5E7EB] shadow-xl max-w-md w-full p-8 text-center">
+          <div className="w-16 h-16 bg-[#FEF2F2] rounded-full flex items-center justify-center mx-auto mb-4">
+            <FileText className="w-8 h-8 text-[#EF4444]" />
+          </div>
+          <h2 className="text-xl font-bold text-[#111827] mb-2">No se encontró el profesional</h2>
+          <p className="text-[#6B7280] mb-6">{profError}</p>
+          <Link
+            to="/buscar"
+            className="inline-flex items-center justify-center gap-2 w-full py-3 bg-[#1E40AF] text-white rounded-xl text-sm font-semibold hover:bg-[#1D3FA0] transition-colors"
+          >
+            Volver a buscar
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   // === VISTA: éxito ===
-  if (step === 4 && createdRequest) {
+  if (step === 4 && createdRequest && professional) {
     return (
       <div className="min-h-screen bg-[#F9FAFB] pt-16 flex items-center justify-center p-6" style={{ fontFamily: "'Inter', sans-serif" }}>
         <div className="bg-white rounded-3xl border border-[#E5E7EB] shadow-xl max-w-md w-full p-8 text-center">
@@ -191,10 +237,10 @@ export function BookingPage() {
 
           <div className="bg-[#F9FAFB] rounded-2xl p-5 text-left mb-6 border border-[#E5E7EB]">
             <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#E5E7EB]">
-              <img src={profMock.photo} alt={profMock.name} className="w-11 h-11 rounded-xl object-cover" />
+              <img src={profPhoto} alt={profName} className="w-11 h-11 rounded-xl object-cover" />
               <div>
-                <p className="font-semibold text-[#111827]">{profMock.name}</p>
-                <p className="text-sm text-[#6B7280]">{profMock.specialty}</p>
+                <p className="font-semibold text-[#111827]">{profName}</p>
+                <p className="text-sm text-[#6B7280]">{profSpecialty}</p>
               </div>
             </div>
             {[
@@ -288,8 +334,8 @@ export function BookingPage() {
 
                 {servicesLoading ? (
                   <div className="space-y-2">
-                    <div className="h-16 bg-[#F3F4F6] rounded-xl" />
-                    <div className="h-16 bg-[#F3F4F6] rounded-xl" />
+                    <div className="h-16 bg-[#F3F4F6] rounded-xl animate-pulse" />
+                    <div className="h-16 bg-[#F3F4F6] rounded-xl animate-pulse" />
                   </div>
                 ) : services.length === 0 ? (
                   <div className="p-4 text-sm text-[#6B7280] text-center">
@@ -392,7 +438,6 @@ export function BookingPage() {
                   <p className="text-xs text-[#9CA3AF] mt-3 text-center">* No se pueden agendar fechas pasadas</p>
                 </div>
 
-                {/* Workday */}
                 <div className="pt-5 border-t border-[#F3F4F6]">
                   <h3 className="font-bold text-[#111827] mb-3 flex items-center gap-2">
                     <Clock className="w-5 h-5 text-[#1E40AF]" /> Jornada preferida
@@ -426,7 +471,7 @@ export function BookingPage() {
             )}
 
             {/* STEP 3: Confirmación */}
-            {step === 3 && selectedService && selectedDate && workday && (
+            {step === 3 && selectedService && selectedDate && workday && professional && (
               <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 space-y-4">
                 <h2 className="font-bold text-[#111827] flex items-center gap-2">
                   <FileText className="w-5 h-5 text-[#1E40AF]" /> Revisa tu solicitud
@@ -434,10 +479,10 @@ export function BookingPage() {
 
                 <div className="bg-[#F9FAFB] rounded-2xl p-4 border border-[#E5E7EB] space-y-3">
                   <div className="flex items-center gap-3 pb-3 border-b border-[#E5E7EB]">
-                    <img src={profMock.photo} alt={profMock.name} className="w-11 h-11 rounded-xl object-cover" />
+                    <img src={profPhoto} alt={profName} className="w-11 h-11 rounded-xl object-cover" />
                     <div>
-                      <p className="font-semibold text-[#111827]">{profMock.name}</p>
-                      <p className="text-sm text-[#6B7280]">{profMock.specialty}</p>
+                      <p className="font-semibold text-[#111827]">{profName}</p>
+                      <p className="text-sm text-[#6B7280]">{profSpecialty}</p>
                     </div>
                   </div>
 
@@ -471,9 +516,8 @@ export function BookingPage() {
                   <div className="flex items-start gap-3">
                     <MapPin className="w-4 h-4 text-[#1E40AF] flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-xs text-[#9CA3AF]">Ubicación</p>
-                      <p className="text-sm font-medium text-[#111827]">Popayán centro (temporal)</p>
-                      <p className="text-xs text-[#9CA3AF]">{DEFAULT_LAT.toFixed(4)}, {DEFAULT_LNG.toFixed(4)}</p>
+                      <p className="text-xs text-[#9CA3AF]">Ubicación del profesional</p>
+                      <p className="text-xs text-[#9CA3AF]">{profLat.toFixed(4)}, {profLng.toFixed(4)}</p>
                     </div>
                   </div>
                 </div>
@@ -493,7 +537,6 @@ export function BookingPage() {
               </div>
             )}
 
-            {/* Nav buttons */}
             {step < 4 && (
               <div className="flex gap-3 mt-5">
                 {step > 1 && (
@@ -533,17 +576,28 @@ export function BookingPage() {
           {/* Sidebar resumen */}
           <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 h-fit sticky top-20">
             <h3 className="font-bold text-[#111827] mb-4">Resumen</h3>
-            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#F3F4F6]">
-              <img src={profMock.photo} alt={profMock.name} className="w-10 h-10 rounded-xl object-cover" />
-              <div>
-                <p className="text-sm font-semibold text-[#111827]">{profMock.name}</p>
-                <p className="text-xs text-[#6B7280]">{profMock.specialty}</p>
-                <div className="flex items-center gap-1">
-                  <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-                  <span className="text-xs text-[#374151]">{profMock.rating}</span>
+
+            {profLoading ? (
+              <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#F3F4F6] animate-pulse">
+                <div className="w-10 h-10 rounded-xl bg-[#F3F4F6]" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-3 bg-[#F3F4F6] rounded w-24" />
+                  <div className="h-2.5 bg-[#F3F4F6] rounded w-16" />
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#F3F4F6]">
+                <img src={profPhoto} alt={profName} className="w-10 h-10 rounded-xl object-cover" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#111827] truncate">{profName}</p>
+                  <p className="text-xs text-[#6B7280] truncate">{profSpecialty}</p>
+                  <div className="flex items-center gap-1">
+                    <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                    <span className="text-xs text-[#374151]">{profRating.toFixed(1)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 text-sm">
               {selectedService && (

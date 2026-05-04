@@ -1,19 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import {
-  Search, MapPin, Star, ChevronRight, Shield, Clock, ThumbsUp, Wrench,
+  Search, MapPin, Star, Shield, Clock, ThumbsUp, Wrench,
   Droplets, Zap, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck,
   Paintbrush2, Bug, ArrowRight, CheckCircle2, Users, Briefcase, Award
 } from 'lucide-react';
-import { categories as mockCategories, professionals, IMGS } from '../data/mockData';
+import { categories as mockCategories, professionals as mockProfessionals, IMGS } from '../data/mockData';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
-import type { CategoryName } from '../../services/professionals/professionals.types';
+import type { ProfessionalPublicDTO } from '../../services/professionals/professionals.types';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck, Bug,
 };
 
-// Mapa visual por nombre de categoría para asignar iconos y colores
+// Mapa visual por nombre de categoría
 const CATEGORY_VISUAL: Record<string, { iconName: string; color: string; bgColor: string }> = {
   'Plomería':       { iconName: 'Droplets',    color: '#1E40AF', bgColor: '#EFF6FF' },
   'Electricidad':   { iconName: 'Zap',         color: '#D97706', bgColor: '#FFFBEB' },
@@ -27,6 +27,16 @@ const CATEGORY_VISUAL: Record<string, { iconName: string; color: string; bgColor
   'Fumigación':     { iconName: 'Bug',         color: '#BE185D', bgColor: '#FDF2F8' },
   'Tecnología':     { iconName: 'Zap',         color: '#6366F1', bgColor: '#EEF2FF' },
 };
+
+// Foto de respaldo cuando un profesional no tiene profilePictureUrl
+const FALLBACK_PHOTOS = [IMGS.man1, IMGS.man2, IMGS.woman1].filter(Boolean);
+function getFallbackPhoto(id: string): string {
+  if (FALLBACK_PHOTOS.length === 0) return '';
+  // Hash simple del id para escoger foto consistente
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i)) % FALLBACK_PHOTOS.length;
+  return FALLBACK_PHOTOS[hash];
+}
 
 const STATS = [
   { value: '500+', label: 'Profesionales activos', icon: Briefcase },
@@ -67,8 +77,13 @@ export function Landing() {
   const [searchQuery, setSearchQuery] = useState('');
   const [location, setLocation] = useState('Popayán, Cauca');
 
-  // Categorías: inicia con mock, reemplaza con datos del API
+  // Categorías
   const [categories, setCategories] = useState(mockCategories);
+
+  // Profesionales destacados (API real con fallback a mock)
+  const [featuredPros, setFeaturedPros] = useState<ProfessionalPublicDTO[] | null>(null);
+  const [usingMockPros, setUsingMockPros] = useState(false);
+  const [prosLoading, setProsLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -92,6 +107,36 @@ export function Landing() {
     return () => { mounted = false; };
   }, []);
 
+  // Cargar profesionales destacados del endpoint público
+  useEffect(() => {
+    let mounted = true;
+    setProsLoading(true);
+
+    ProfessionalsService.getPublicList(0, 6)
+      .then((page) => {
+        if (!mounted) return;
+        if (page.content && page.content.length > 0) {
+          // Ordenar: primero gold=true, luego por rating
+          const sorted = [...page.content].sort((a, b) => {
+            if (a.gold !== b.gold) return a.gold ? -1 : 1;
+            return (b.rating || 0) - (a.rating || 0);
+          });
+          setFeaturedPros(sorted);
+          setUsingMockPros(false);
+        } else {
+          setUsingMockPros(true);
+        }
+      })
+      .catch(() => {
+        if (mounted) setUsingMockPros(true);
+      })
+      .finally(() => {
+        if (mounted) setProsLoading(false);
+      });
+
+    return () => { mounted = false; };
+  }, []);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     navigate(`/buscar?q=${encodeURIComponent(searchQuery)}&loc=${encodeURIComponent(location)}`);
@@ -101,7 +146,6 @@ export function Landing() {
     <div className="bg-[#F9FAFB]">
       {/* ─── HERO ─── */}
       <section className="relative min-h-screen flex items-center overflow-hidden">
-        {/* Background image */}
         <div className="absolute inset-0">
           <img
             src={IMGS.hero}
@@ -111,10 +155,8 @@ export function Landing() {
           <div className="absolute inset-0 bg-gradient-to-r from-[#0F2460]/90 via-[#1E40AF]/75 to-[#1E40AF]/40" />
         </div>
 
-        {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-6 py-32 w-full">
           <div className="max-w-2xl">
-            {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-1.5 mb-6">
               <MapPin className="w-3.5 h-3.5 text-[#10B981]" />
               <span className="text-white/90 text-sm">Exclusivo para Popayán, Cauca</span>
@@ -130,7 +172,6 @@ export function Landing() {
               con profesionales locales verificados de Popayán.
             </p>
 
-            {/* Search bar */}
             <form onSubmit={handleSearch} className="bg-white rounded-2xl shadow-2xl p-2 flex flex-col sm:flex-row gap-2 max-w-xl">
               <div className="flex items-center gap-3 flex-1 px-3">
                 <Search className="w-4 h-4 text-[#9CA3AF] flex-shrink-0" />
@@ -161,7 +202,6 @@ export function Landing() {
               </button>
             </form>
 
-            {/* Quick categories */}
             <div className="flex flex-wrap gap-2 mt-5">
               {categories.slice(0, 5).map(cat => (
                 <button
@@ -176,7 +216,6 @@ export function Landing() {
           </div>
         </div>
 
-        {/* Floating stats card */}
         <div className="absolute bottom-8 right-8 hidden lg:flex flex-col gap-4">
           <div className="bg-white rounded-xl shadow-xl p-4 w-52 border border-[#E5E7EB]">
             <div className="flex items-center gap-3 mb-2">
@@ -258,7 +297,7 @@ export function Landing() {
         </div>
       </section>
 
-      {/* ─── FEATURED PROFESSIONALS ─── */}
+      {/* ─── FEATURED PROFESSIONALS (REAL DATA) ─── */}
       <section className="py-20 bg-white border-y border-[#E5E7EB]">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-end justify-between mb-10">
@@ -271,70 +310,162 @@ export function Landing() {
               Ver todos <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {professionals.slice(0, 6).map(prof => (
-              <Link
-                key={prof.id}
-                to={`/profesional/${prof.id}`}
-                className="group bg-white rounded-2xl border border-[#E5E7EB] hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
-              >
-                {/* Header banner */}
-                <div className="relative h-28 bg-gradient-to-br from-[#1E40AF] to-[#3B82F6] rounded-t-2xl overflow-hidden">
-                  <div className="absolute inset-0 opacity-20" style={{
-                    backgroundImage: `url(${IMGS.service})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }} />
-                  {prof.badge && (
-                    <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-[#1E40AF] text-xs font-semibold px-2.5 py-1 rounded-full">
-                      {prof.badge}
+
+          {/* Loading skeletons */}
+          {prosLoading && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1,2,3,4,5,6].map(i => (
+                <div key={i} className="bg-white rounded-2xl border border-[#E5E7EB] overflow-hidden animate-pulse">
+                  <div className="h-28 bg-[#F3F4F6]" />
+                  <div className="px-5 pb-5 -mt-9 relative z-10">
+                    <div className="w-[72px] h-[72px] rounded-xl bg-[#E5E7EB] mx-auto mb-3 border-4 border-white" />
+                    <div className="h-4 bg-[#F3F4F6] rounded w-32 mx-auto mb-2" />
+                    <div className="h-3 bg-[#F3F4F6] rounded w-24 mx-auto mb-3" />
+                    <div className="h-3 bg-[#F3F4F6] rounded w-20 mx-auto mb-4" />
+                    <div className="h-12 bg-[#F3F4F6] rounded mt-3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Datos reales del API */}
+          {!prosLoading && !usingMockPros && featuredPros && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {featuredPros.map(prof => {
+                const fullName = `${prof.firstName} ${prof.lastName}`.trim();
+                const photo = prof.profilePictureUrl || getFallbackPhoto(prof.id);
+                const isAvailable = prof.status === 'DISPONIBLE';
+                return (
+                  <Link
+                    key={prof.id}
+                    to={`/profesional/${prof.id}`}
+                    className="group bg-white rounded-2xl border border-[#E5E7EB] hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                  >
+                    <div className="relative h-28 bg-gradient-to-br from-[#1E40AF] to-[#3B82F6] rounded-t-2xl overflow-hidden">
+                      <div className="absolute inset-0 opacity-20" style={{
+                        backgroundImage: `url(${IMGS.service})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }} />
+                      {prof.gold && (
+                        <div className="absolute top-3 left-3 bg-gradient-to-r from-amber-400 to-yellow-500 text-white text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+                          <Award className="w-3 h-3" /> Top
+                        </div>
+                      )}
+                      <div className={`absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                        isAvailable ? 'bg-[#ECFDF5] text-[#10B981]' : 'bg-[#FEF2F2] text-[#EF4444]'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${isAvailable ? 'bg-[#10B981]' : 'bg-[#EF4444]'}`} />
+                        {isAvailable ? 'Disponible' : 'Ocupado'}
+                      </div>
                     </div>
-                  )}
-                  <div className={`absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                    prof.available ? 'bg-[#ECFDF5] text-[#10B981]' : 'bg-[#FEF2F2] text-[#EF4444]'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${prof.available ? 'bg-[#10B981]' : 'bg-[#EF4444]'}`} />
-                    {prof.available ? 'Disponible' : 'Ocupado'}
-                  </div>
-                </div>
 
-                {/* Avatar centered, overlapping header */}
-                <div className="flex justify-center -mt-9 relative z-10 mb-3">
-                  <img
-                    src={prof.photo}
-                    alt={prof.name}
-                    className="w-[72px] h-[72px] rounded-xl object-cover border-4 border-white shadow-lg"
-                  />
-                </div>
-
-                {/* Content */}
-                <div className="px-5 pb-5 text-center">
-                  <h3 className="font-semibold text-[#111827] group-hover:text-[#1E40AF] transition-colors">{prof.name}</h3>
-                  <p className="text-sm text-[#6B7280] mt-0.5">{prof.specialty}</p>
-
-                  <div className="flex items-center justify-center gap-1 mt-2 mb-3">
-                    {[1,2,3,4,5].map(s => (
-                      <Star key={s} className={`w-3.5 h-3.5 ${s <= Math.round(prof.rating) ? 'text-yellow-400 fill-yellow-400' : 'text-[#D1D5DB] fill-[#D1D5DB]'}`} />
-                    ))}
-                    <span className="text-sm font-medium text-[#374151] ml-1">{prof.rating}</span>
-                    <span className="text-sm text-[#9CA3AF]">({prof.reviewCount})</span>
-                  </div>
-
-                  <p className="text-sm text-[#6B7280] line-clamp-2 mb-4">{prof.shortDescription}</p>
-
-                  <div className="flex items-center justify-between pt-3 border-t border-[#F3F4F6]">
-                    <div className="flex items-center gap-1 text-sm text-[#6B7280]">
-                      <MapPin className="w-3.5 h-3.5" />
-                      <span>{prof.distance}</span>
+                    <div className="flex justify-center -mt-9 relative z-10 mb-3">
+                      <img
+                        src={photo}
+                        alt={fullName}
+                        className="w-[72px] h-[72px] rounded-xl object-cover border-4 border-white shadow-lg"
+                      />
                     </div>
-                    <span className="text-sm font-semibold text-[#1E40AF]">
-                      ${prof.hourlyRate.toLocaleString()} /hr
-                    </span>
+
+                    <div className="px-5 pb-5 text-center">
+                      <h3 className="font-semibold text-[#111827] group-hover:text-[#1E40AF] transition-colors">
+                        {fullName}
+                      </h3>
+                      <p className="text-sm text-[#6B7280] mt-0.5">{prof.professionName}</p>
+
+                      <div className="flex items-center justify-center gap-1 mt-2 mb-3">
+                        {[1,2,3,4,5].map(s => (
+                          <Star key={s} className={`w-3.5 h-3.5 ${s <= Math.round(prof.rating || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-[#D1D5DB] fill-[#D1D5DB]'}`} />
+                        ))}
+                        <span className="text-sm font-medium text-[#374151] ml-1">{(prof.rating || 0).toFixed(1)}</span>
+                      </div>
+
+                      <p className="text-sm text-[#6B7280] line-clamp-2 mb-4">
+                        {prof.categoryName}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-[#F3F4F6]">
+                        <div className="flex items-center gap-1 text-sm text-[#6B7280]">
+                          <Shield className="w-3.5 h-3.5 text-[#10B981]" />
+                          <span className="text-xs">{prof.accountStatus === 'VERIFICADO' ? 'Verificado' : prof.accountStatus}</span>
+                        </div>
+                        <span className="text-sm font-semibold text-[#1E40AF]">
+                          Ver perfil →
+                        </span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Fallback: mock cuando el API no responde */}
+          {!prosLoading && usingMockPros && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {mockProfessionals.slice(0, 6).map(prof => (
+                <Link
+                  key={prof.id}
+                  to={`/profesional/${prof.id}`}
+                  className="group bg-white rounded-2xl border border-[#E5E7EB] hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                >
+                  <div className="relative h-28 bg-gradient-to-br from-[#1E40AF] to-[#3B82F6] rounded-t-2xl overflow-hidden">
+                    <div className="absolute inset-0 opacity-20" style={{
+                      backgroundImage: `url(${IMGS.service})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }} />
+                    {prof.badge && (
+                      <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm text-[#1E40AF] text-xs font-semibold px-2.5 py-1 rounded-full">
+                        {prof.badge}
+                      </div>
+                    )}
+                    <div className={`absolute top-3 right-3 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                      prof.available ? 'bg-[#ECFDF5] text-[#10B981]' : 'bg-[#FEF2F2] text-[#EF4444]'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${prof.available ? 'bg-[#10B981]' : 'bg-[#EF4444]'}`} />
+                      {prof.available ? 'Disponible' : 'Ocupado'}
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+
+                  <div className="flex justify-center -mt-9 relative z-10 mb-3">
+                    <img
+                      src={prof.photo}
+                      alt={prof.name}
+                      className="w-[72px] h-[72px] rounded-xl object-cover border-4 border-white shadow-lg"
+                    />
+                  </div>
+
+                  <div className="px-5 pb-5 text-center">
+                    <h3 className="font-semibold text-[#111827] group-hover:text-[#1E40AF] transition-colors">{prof.name}</h3>
+                    <p className="text-sm text-[#6B7280] mt-0.5">{prof.specialty}</p>
+
+                    <div className="flex items-center justify-center gap-1 mt-2 mb-3">
+                      {[1,2,3,4,5].map(s => (
+                        <Star key={s} className={`w-3.5 h-3.5 ${s <= Math.round(prof.rating) ? 'text-yellow-400 fill-yellow-400' : 'text-[#D1D5DB] fill-[#D1D5DB]'}`} />
+                      ))}
+                      <span className="text-sm font-medium text-[#374151] ml-1">{prof.rating}</span>
+                      <span className="text-sm text-[#9CA3AF]">({prof.reviewCount})</span>
+                    </div>
+
+                    <p className="text-sm text-[#6B7280] line-clamp-2 mb-4">{prof.shortDescription}</p>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-[#F3F4F6]">
+                      <div className="flex items-center gap-1 text-sm text-[#6B7280]">
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>{prof.distance}</span>
+                      </div>
+                      <span className="text-sm font-semibold text-[#1E40AF]">
+                        ${prof.hourlyRate.toLocaleString()} /hr
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

@@ -6,9 +6,9 @@ import {
   Plus, Edit3, Trash2, Save, Phone, Users, X, Send, Truck, PlayCircle, RefreshCw
 } from 'lucide-react';
 import { professionals } from '../data/mockData';
-import { ServiceRequestsService } from '../../services/requests/requests.service';
 import { useApp } from '../context/AppContext';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
+import { ServiceRequestsService } from '../../services/requests/requests.service';
 import type { ServiceDetailDTO } from '../../services/professionals/professionals.types';
 import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/requests.types';
 import { GoogleMapPicker } from '../components/GoogleMapPicker';
@@ -85,7 +85,6 @@ function AcceptModal(props: {
       setError('La hora de fin debe ser posterior a la hora de inicio.');
       return;
     }
-    // Convertir HH:MM → HH:MM:SS
     onSubmit(`${startTime}:00`, `${endTime}:00`);
   };
 
@@ -326,14 +325,17 @@ export function ProfessionalDashboard() {
     Sábado: ['9:00 AM', '10:00 AM'],
   });
 
-  const { logout, userName, userPhoto, user, updateProfile, authLoading, authError } = useApp() as any;
+  const { logout, userName, userPhoto, user, updateProfile, authLoading, authError } = useApp();
   const prof = professionals[0];
 
   // === Perfil ===
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  const professionalId = user?.id as string | undefined;
+  // === IDs ===
+  // Backend devuelve professionalId en /profile cuando rol es PROFESSIONAL
+  // Fallback a user.id por compatibilidad
+  const professionalId = user?.professionalId || user?.id;
 
   // === Servicios (API) ===
   const [services, setServices] = useState<ServiceDetailDTO[]>([]);
@@ -503,7 +505,7 @@ export function ProfessionalDashboard() {
     }
   };
 
-  // === Disponibilidad (mock por ahora) ===
+  // === Disponibilidad (mock) ===
   const toggleSlot = (day: string, hour: string) => {
     setAvailability(prev => ({
       ...prev,
@@ -1048,8 +1050,7 @@ export function ProfessionalDashboard() {
                         <label className="block text-sm font-medium text-[#374151] mb-1.5">Dirección de trabajo</label>
                         {/*
                           GoogleMapPicker renderiza internamente un <input type="hidden" name="address">
-                          que el FormData del <form> de abajo leerá automáticamente,
-                          manteniendo el comportamiento original del submit.
+                          que el FormData del <form> de abajo lee automáticamente.
                         */}
                         <GoogleMapPicker defaultAddress={user?.address || ''} />
                       </div>

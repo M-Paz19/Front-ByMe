@@ -4,6 +4,9 @@ import type {
   CategoryName,
   CreateProfessionalProfileRequest,
   CreateServiceRequest,
+  PageResponse,
+  ProfessionalDetailPublicDTO,
+  ProfessionalPublicDTO,
   ProfessionDetail,
   ProfessionName,
   ServiceDetailDTO,
@@ -62,5 +65,15 @@ export class ProfessionalsService {
   static async deleteService(serviceId: UUID): Promise<UserResponse> {
     const res = await professionalsApi.delete(`/services/${serviceId}`);
     return res.data as UserResponse;
+  }
+
+  static async getPublicList(page = 0, size = 6): Promise<PageResponse<ProfessionalPublicDTO>> {
+  const res = await professionalsApi.get('/professionals', { params: { page, size } });
+  return res.data;
+  }
+
+  static async getPublicById(id: string): Promise<ProfessionalDetailPublicDTO> {
+    const res = await professionalsApi.get(`/professionals/${id}/public`);
+    return res.data as ProfessionalDetailPublicDTO;
   }
 }

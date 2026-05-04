@@ -23,6 +23,7 @@ import {
 } from '@react-google-maps/api';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import type { Professional } from '../data/mockData';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from './googleMapsConfig';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -58,14 +59,9 @@ const MAP_OPTIONS: google.maps.MapOptions = {
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function RealMap({ professionals, selectedId, onSelect }: RealMapProps) {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  const apiKey = GOOGLE_MAPS_LOADER_OPTIONS.googleMapsApiKey;
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: 'byme-google-maps',
-    googleMapsApiKey: apiKey ?? '',
-    language: 'es',
-    region: 'CO',
-  });
+  const { isLoaded, loadError } = useJsApiLoader(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [profsWithCoords, setProfsWithCoords] = useState<ProfWithCoords[]>([]);
