@@ -3,3 +3,13 @@ dist/
 .env
 .env.*
 .DS_Store
+coverage/prettify.js
+coverage/prettify.css
+coverage/services/auth/auth.service.ts.html
+coverage/services/auth/index.html
+coverage/services/professionals/index.html
+coverage/services/professionals/professionals.service.ts.html
+coverage/services/requests/index.html
+coverage/services/requests/requests.service.ts.html
+coverage/sort-arrow-sprite.png
+coverage/sorter.js
