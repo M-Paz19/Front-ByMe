@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
@@ -29,6 +30,26 @@ export default defineConfig({
         },
       },
     },
-  },                          // ← esta llave cerraba server y faltaba
+  },
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    css: false,
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.config.*',
+        '**/*.d.ts',
+        'src/main.tsx',
+        'src/app/data/mockData.ts',
+      ],
+    },
+  },
 })
