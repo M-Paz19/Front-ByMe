@@ -4,12 +4,6 @@
  * Modal para aceptar una solicitud de servicio.
  * El profesional propone una hora de inicio y una hora de fin.
  *
- * Props:
- *  - open: si está abierto
- *  - loading: deshabilita botón mientras procesa
- *  - onClose: callback al cancelar
- *  - onSubmit: callback con (startTime, endTime) en formato "HH:mm:00"
- *
  * Validaciones:
  *  - startTime y endTime obligatorios
  *  - endTime > startTime

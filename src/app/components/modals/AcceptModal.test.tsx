@@ -71,7 +71,6 @@ describe('AcceptModal', () => {
       const start = screen.getByLabelText(/hora de inicio/i);
       const end = screen.getByLabelText(/hora de fin/i);
 
-      // Limpiar y poner valores nuevos
       await user.clear(start);
       await user.type(start, '14:00');
       await user.clear(end);
@@ -155,7 +154,6 @@ describe('AcceptModal', () => {
       const cancelBtn = screen.getByRole('button', { name: /^cancelar$/i });
       expect(cancelBtn).toBeDisabled();
 
-      // Botón de aceptar también debe estar disabled
       const acceptBtns = screen.getAllByRole('button')
         .filter((b) => (b as HTMLButtonElement).disabled);
       expect(acceptBtns.length).toBeGreaterThanOrEqual(2);

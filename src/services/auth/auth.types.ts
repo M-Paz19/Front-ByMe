@@ -31,8 +31,6 @@ export type UserProfileResponse = {
   address?: string;
   age?: number;
   roles?: string[];
-
-  // posibles nombres para foto
   photoUrl?: string;
   profilePhotoUrl?: string;
   avatarUrl?: string;

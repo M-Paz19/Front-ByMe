@@ -61,24 +61,20 @@ export function BookingPage() {
   const today = new Date();
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
 
-  // === Profesional (datos reales del API) ===
   const [professional, setProfessional] = useState<ProfessionalDetailPublicDTO | null>(null);
   const [profLoading, setProfLoading] = useState(true);
   const [profError, setProfError] = useState<string | null>(null);
 
-  // === Servicios ===
   const [services, setServices] = useState<ServiceDetailDTO[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
   const [servicesError, setServicesError] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState<ServiceDetailDTO | null>(null);
 
-  // === Fecha + jornada ===
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<{ y: number; m: number; d: number } | null>(null);
   const [workday, setWorkday] = useState<Workday | null>(null);
 
-  // === Submit ===
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [createdRequest, setCreatedRequest] = useState<ServiceRequestDTO | null>(null);
@@ -133,7 +129,6 @@ export function BookingPage() {
   const profRating = professional?.rating || 0;
 
   // Coordenadas del profesional — el backend los tiene invertidos:
-  // ⚠ `lat` contiene longitud, `lng` contiene latitud (reportar al backend)
   const profLat = professional?.lng ?? DEFAULT_LAT;
   const profLng = professional?.lat ?? DEFAULT_LNG;
 

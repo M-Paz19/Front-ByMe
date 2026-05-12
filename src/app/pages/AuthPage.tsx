@@ -32,14 +32,11 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
   const [params] = useSearchParams();
   const { isLoggedIn, role } = useApp();
 
-  // Registro profesional en 2 pasos
   const [proStep, setProStep] = useState<'form' | 'select-profession'>('form');
 
-  // Profesiones desde el API
   const [professions, setProfessions] = useState<ProfessionName[]>([]);
   const [professionsLoading, setProfessionsLoading] = useState(false);
 
-  // Coordenadas seleccionadas en el GoogleMapPicker (paso 2)
   const [proLat, setProLat] = useState<number | null>(null);
   const [proLng, setProLng] = useState<number | null>(null);
   const [proAddress, setProAddress] = useState<string>('');
@@ -58,7 +55,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
   useEffect(() => {
     if (!isLoggedIn) return;
 
-    // No redirigir si estamos en el paso 2 del registro profesional
     if (view === 'register-pro' && proStep === 'select-profession') return;
 
     const path =
@@ -194,7 +190,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
     }
   };
 
-  // Paso 2: Seleccionar profesión + ubicación y crear perfil profesional
   const handleSelectProfession = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setFormError(null);
@@ -215,7 +210,6 @@ export function AuthPage({ initialView }: { initialView?: AuthView }) {
       await becomeProfessional(professionId, proLat, proLng);
       goToDashboard();
     } catch {
-      // El error ya quedó en authError
     }
   };
 

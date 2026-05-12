@@ -21,7 +21,7 @@ function mockUseApp(overrides: Partial<ReturnType<typeof useApp>> = {}) {
   } as any);
 }
 
-// Helper: render con router
+// Helper render con router
 function renderNavbar() {
   return render(
     <MemoryRouter initialEntries={['/buscar']}>
@@ -73,8 +73,6 @@ describe('Navbar', () => {
 
     it('muestra el primer nombre del usuario', () => {
       renderNavbar();
-      // En desktop muestra solo el primer nombre ("Juana")
-      // Puede aparecer múltiples veces (desktop + mobile), por eso usamos getAllByText
       const matches = screen.getAllByText('Juana');
       expect(matches.length).toBeGreaterThan(0);
     });
@@ -165,11 +163,9 @@ describe('Navbar', () => {
 
       expect(screen.queryByText('Mi perfil')).not.toBeInTheDocument();
 
-      // Click en el botón que muestra "Juana"
       const profileButton = screen.getByText('Juana').closest('button')!;
       await user.click(profileButton);
 
-      // Ahora SÍ debe verse "Mi perfil" del dropdown
       expect(screen.getByText('Mi perfil')).toBeInTheDocument();
       expect(screen.getByText('Mi Panel')).toBeInTheDocument();
     });

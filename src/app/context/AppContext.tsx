@@ -37,10 +37,6 @@ interface AppContextType {
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (data: UpdateProfileRequest, file?: File | null) => Promise<void>;
-  /**
-   * Convierte la cuenta actual en perfil profesional.
-   * Requiere `professionId` y coordenadas geográficas (lat/lng).
-   */
   becomeProfessional: (professionId: string, lat: number, lng: number) => Promise<void>;
 }
 
@@ -318,7 +314,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         lng,
       });
 
-      // El endpoint devuelve un nuevo token con rol PROFESSIONAL
       const newToken = res.token;
       if (newToken) {
         setToken(newToken);
@@ -336,12 +331,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           roles: payload?.roles ?? prev?.roles,
         }));
 
-        // Refrescar el profile completo para obtener el nuevo professionalId
         try {
           const fresh = await AuthService.getProfile();
           setUser((prev) => mapUserFromProfile(fresh, prev));
         } catch {
-          // si falla, no es crítico — el siguiente hydrate lo capturará
         }
       }
     } catch (err: any) {

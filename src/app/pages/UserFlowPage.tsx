@@ -10,7 +10,6 @@ import {
   Award, Map, LogOut, ThumbsUp, ChevronLeft
 } from 'lucide-react';
 
-// ── Types ─────────────────────────────────────────────────────
 interface FlowStep {
   id: string;
   step: number;
@@ -36,7 +35,6 @@ interface RoleConfig {
   gradient: string;
 }
 
-// ── Flow data ─────────────────────────────────────────────────
 const USER_FLOW: FlowStep[] = [
   {
     id: 'landing', step: 1, type: 'screen',

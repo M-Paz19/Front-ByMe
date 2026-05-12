@@ -19,7 +19,6 @@ export function decodeJwtPayload(token: string): JwtUserPayload | null {
 
 export function isJwtExpired(payload: JwtUserPayload | null): boolean {
   if (!payload?.exp) return false;
-  // exp is in seconds
   const nowSec = Math.floor(Date.now() / 1000);
   return payload.exp <= nowSec;
 }
@@ -28,6 +27,5 @@ export function mapRolesToAppRole(roles?: string[]): "usuario" | "profesional" |
   const normalized = (roles || []).map((r) => r.toUpperCase());
   if (normalized.includes("ADMIN")) return "admin";
   if (normalized.includes("PROFESSIONAL") || normalized.includes("PRO") || normalized.includes("PROFESIONAL")) return "profesional";
-  // backend sample uses USER
   return "usuario";
 }

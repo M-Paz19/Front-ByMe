@@ -354,7 +354,6 @@ export function UserDashboard() {
 
   useEffect(() => {
     void loadRequests();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const activeRequests = useMemo(

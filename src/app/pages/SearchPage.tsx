@@ -64,24 +64,18 @@ interface DisplayProfessional {
   address?: string;
 }
 
-/**
- * Combina datos del listado paginado + detalle (para coords reales).
- * El backend tiene `lat`/`lng` invertidos, así que los corregimos aquí.
- */
+
 function buildDisplay(
   base: ProfessionalPublicDTO,
   detail: ProfessionalDetailPublicDTO | null,
 ): DisplayProfessional {
   const fullName = `${base.firstName} ${base.lastName}`.trim();
 
-  // ⚠ El backend invierte lat/lng en el endpoint individual:
-  //    `lat` contiene en realidad la longitud
-  //    `lng` contiene en realidad la latitud
   let realLat: number | undefined;
   let realLng: number | undefined;
   if (detail && typeof detail.lat === 'number' && typeof detail.lng === 'number') {
-    realLat = detail.lng; // swap
-    realLng = detail.lat; // swap
+    realLat = detail.lng; 
+    realLng = detail.lat; 
   }
 
   return {

@@ -5,7 +5,6 @@ export type UserResponse = {
   message: string;
 };
 
-/** UserProfileResponse (Obtener y Actualizar Perfil) */
 export type UserProfileResponse = {
   id: UUID;
   firstName: string;
@@ -71,7 +70,7 @@ export type UpdateServiceRequest = CreateServiceRequest;
 
 
 export interface ProfessionalPublicDTO {
-  id: string;                       // UUID del profesional (usar para /reservar/:id)
+  id: string;                      
   firstName: string;
   lastName: string;
   profilePictureUrl: string | null;
@@ -83,7 +82,6 @@ export interface ProfessionalPublicDTO {
   gold: boolean;
 }
 
-/** Estructura de paginación de Spring Boot */
 export interface PageResponse<T> {
   content: T[];
   totalElements: number;

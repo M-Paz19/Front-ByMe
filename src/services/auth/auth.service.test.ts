@@ -42,7 +42,6 @@ const apiMock = api as unknown as {
 
 describe('AuthService', () => {
   beforeEach(() => {
-    // Reinicia todos los mocks antes de cada test
     vi.clearAllMocks();
   });
 

@@ -207,8 +207,6 @@ describe('ServiceModal', () => {
   describe('estado loading', () => {
     it('deshabilita el botón "Guardar" cuando loading=true', () => {
       render(<ServiceModal {...defaultProps()} loading={true} />);
-      // Cuando está loading, no muestra texto "Guardar", solo el spinner.
-      // Buscamos el botón con tipo submit que esté disabled.
       const buttons = screen.getAllByRole('button');
       const submitBtn = buttons.find((b) => (b as HTMLButtonElement).disabled);
       expect(submitBtn).toBeDefined();

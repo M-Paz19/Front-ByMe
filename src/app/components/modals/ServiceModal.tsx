@@ -50,7 +50,6 @@ export function ServiceModal(props: ServiceModalProps) {
   );
   const [error, setError] = useState<string | null>(null);
 
-  // Reiniciar/hidratar form cuando se abre el modal o cambia `initial`
   useEffect(() => {
     if (!open) return;
     setName(initial?.name ?? '');

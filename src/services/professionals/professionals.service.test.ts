@@ -21,7 +21,6 @@ vi.mock('./professionals.api', () => ({
 import { ProfessionalsService } from './professionals.service';
 import { professionalsApi } from './professionals.api';
 
-// Type-cast para usar .mockResolvedValue
 const apiMock = professionalsApi as unknown as {
   get: ReturnType<typeof vi.fn>;
   post: ReturnType<typeof vi.fn>;

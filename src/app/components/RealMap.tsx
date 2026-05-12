@@ -109,7 +109,6 @@ export function RealMap({ professionals, selectedId, onSelect }: RealMapProps) {
 
       geocoder.geocode({ address: query, region: 'CO' }, (geoResults, status) => {
         if (status === 'OK' && geoResults?.[0]?.geometry?.location) {
-          // Pequeño offset para evitar marcadores superpuestos
           results[index].lat = geoResults[0].geometry.location.lat() + (Math.random() - 0.5) * 0.0008;
           results[index].lng = geoResults[0].geometry.location.lng() + (Math.random() - 0.5) * 0.0008;
         }

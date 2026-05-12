@@ -34,17 +34,7 @@ function sanitize<T extends Record<string, any>>(obj: T): Partial<T> {
   ) as Partial<T>;
 }
 
-/**
- * Rutas absolutas con prefijo /auth/ para que funcionen sin importar
- * qué tenga `baseURL` el axios `api`.
- *
- * Endpoints según la documentación del backend:
- *   POST /auth/register
- *   POST /auth/login
- *   POST /auth/logout
- *   GET  /auth/profile
- *   PUT  /auth/update-profile  ← (no /auth/profile)
- */
+
 export class AuthService {
   static async register(data: RegisterRequest): Promise<void> {
     await api.post("/auth/register", data, {

@@ -129,7 +129,6 @@ describe('ServiceRequestsService', () => {
       expect(apiMock.post).toHaveBeenCalledTimes(1);
       expect(apiMock.post).toHaveBeenCalledWith('/service-requests/req-1/reject');
 
-      // Verificar que NO se pasaron body ni headers
       const callArgs = apiMock.post.mock.calls[0];
       expect(callArgs).toHaveLength(1);
 

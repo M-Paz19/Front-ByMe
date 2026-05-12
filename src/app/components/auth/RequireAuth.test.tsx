@@ -46,14 +46,11 @@ describe('RequireAuth', () => {
   });
 
   it('renderiza los children cuando el usuario está logueado', () => {
-    // Mockear que el user SÍ está logueado
     vi.mocked(useApp).mockReturnValue({ isLoggedIn: true } as any);
 
     renderWithRouter();
 
-    // Debe verse el contenido protegido
     expect(screen.getByText('Contenido secreto')).toBeInTheDocument();
-    // Y NO debe verse la pantalla de login
     expect(screen.queryByText('Pantalla de login')).not.toBeInTheDocument();
   });
 
@@ -62,8 +59,6 @@ describe('RequireAuth', () => {
 
     renderWithRouter();
 
-    // El Navigate hace que cambie la ruta a /login, así que el children
-    // del RequireAuth NO se renderiza, y en su lugar vemos la página de login.
     expect(screen.getByText('Pantalla de login')).toBeInTheDocument();
     expect(screen.queryByText('Contenido secreto')).not.toBeInTheDocument();
   });
