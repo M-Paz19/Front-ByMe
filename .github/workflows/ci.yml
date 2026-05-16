@@ -1,0 +1,45 @@
+# =============================================================================
+# CI: Tests unitarios
+#
+# Este workflow se ejecuta automáticamente cuando:
+#   - Se hace push a la rama main
+#   - Se abre o actualiza un pull request hacia main
+#
+# Pasos:
+#   1. Levanta un Ubuntu limpio
+#   2. Hace checkout del código
+#   3. Configura Node.js 20 con cache de npm
+#   4. Instala dependencias (npm ci es más rápido y reproducible que npm install)
+#   5. Corre los tests en modo no-watch (npm run test:run)
+#
+# Si algún test falla, GitHub muestra una X roja en el commit y bloquea el PR.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests unitarios
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Ejecutar tests
+        run: npm run test:run
