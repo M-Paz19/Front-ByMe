@@ -3,7 +3,8 @@ import { Link } from 'react-router';
 import {
   LayoutDashboard, Briefcase, Calendar, Settings, LogOut, Star,
   CheckCircle2, XCircle, AlertCircle, Clock, MapPin, ChevronRight,
-  Plus, Edit3, Trash2, Save, Phone, Users, Send, Truck, PlayCircle, RefreshCw
+  Plus, Edit3, Trash2, Save, Phone, Users, Send, Truck, PlayCircle, RefreshCw,
+  ShoppingBag
 } from 'lucide-react';
 import { professionals } from '../data/mockData';
 import { useApp } from '../context/AppContext';
@@ -14,8 +15,9 @@ import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/r
 import { GoogleMapPicker } from '../components/GoogleMapPicker';
 import { ServiceModal } from '../components/modals/ServiceModal';
 import { AcceptModal } from '../components/modals/AcceptModal';
+import { RequestCard } from '../components/RequestCard';
 
-type View = 'overview' | 'solicitudes' | 'servicios' | 'disponibilidad' | 'perfil';
+type View = 'overview' | 'solicitudes' | 'mis_reservas' | 'servicios' | 'disponibilidad' | 'perfil';
 
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const HOURS = ['7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'];
@@ -35,6 +37,8 @@ const STATUS_CONFIG: Record<RequestStatus, {
   RECHAZADA:  { label: 'Rechazada',    icon: XCircle,      color: 'text-[#EF4444]', bg: 'bg-[#FEF2F2]' },
   CANCELADA:  { label: 'Cancelada',    icon: XCircle,      color: 'text-[#6B7280]', bg: 'bg-[#F3F4F6]' },
 };
+
+const ACTIVE_STATUSES: RequestStatus[] = ['PENDIENTE', 'ACEPTADA', 'CONFIRMADA', 'EN_CAMINO', 'EN_PROCESO'];
 
 function getApiMsg(err: any): string {
   const data = err?.response?.data;
@@ -78,7 +82,6 @@ export function ProfessionalDashboard() {
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  // Hidratar form cuando llega el user
   useEffect(() => {
     if (!user) return;
     setFormFirstName(user.firstName || '');
@@ -90,6 +93,7 @@ export function ProfessionalDashboard() {
 
   // === IDs ===
   const professionalId = user?.professionalId || user?.id;
+  const userId = user?.id;
 
   // === Servicios (API) ===
   const [services, setServices] = useState<ServiceDetailDTO[]>([]);
@@ -168,7 +172,7 @@ export function ProfessionalDashboard() {
     }
   };
 
-  // === Solicitudes (API real) ===
+  // === Solicitudes recibidas (como profesional) ===
   const [requests, setRequests] = useState<ServiceRequestDTO[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestsError, setRequestsError] = useState<string | null>(null);
@@ -204,6 +208,70 @@ export function ProfessionalDashboard() {
     [requests]
   );
 
+  // === Mis reservas (como cliente) — solicitudes que ESTE usuario hizo a otros profesionales ===
+  const [myBookings, setMyBookings] = useState<ServiceRequestDTO[]>([]);
+  const [myBookingsLoading, setMyBookingsLoading] = useState(false);
+  const [myBookingsError, setMyBookingsError] = useState<string | null>(null);
+  const [bookingActionLoadingId, setBookingActionLoadingId] = useState<string | null>(null);
+
+  const loadMyBookings = async () => {
+    if (!userId) return;
+    setMyBookingsLoading(true);
+    setMyBookingsError(null);
+    try {
+      const list = await ServiceRequestsService.getByUser(userId);
+      setMyBookings(list);
+    } catch (e: any) {
+      setMyBookingsError(getApiMsg(e));
+    } finally {
+      setMyBookingsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view !== 'mis_reservas') return;
+    void loadMyBookings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, userId]);
+
+  const activeMyBookings = React.useMemo(
+    () => myBookings.filter(r => ACTIVE_STATUSES.includes(r.status)),
+    [myBookings]
+  );
+  const historyMyBookings = React.useMemo(
+    () => myBookings.filter(r => !ACTIVE_STATUSES.includes(r.status)),
+    [myBookings]
+  );
+
+  const handleConfirmMyBooking = async (id: string) => {
+    setBookingActionLoadingId(id);
+    setMyBookingsError(null);
+    try {
+      const updated = await ServiceRequestsService.confirm(id);
+      setMyBookings(prev => prev.map(r => r.id === id ? updated : r));
+    } catch (e: any) {
+      setMyBookingsError(getApiMsg(e));
+    } finally {
+      setBookingActionLoadingId(null);
+    }
+  };
+
+  const handleCancelMyBooking = async (id: string) => {
+    const ok = window.confirm('¿Seguro que deseas cancelar esta reserva?');
+    if (!ok) return;
+    setBookingActionLoadingId(id);
+    setMyBookingsError(null);
+    try {
+      const updated = await ServiceRequestsService.cancel(id);
+      setMyBookings(prev => prev.map(r => r.id === id ? updated : r));
+    } catch (e: any) {
+      setMyBookingsError(getApiMsg(e));
+    } finally {
+      setBookingActionLoadingId(null);
+    }
+  };
+
+  // === Acciones solicitudes recibidas ===
   const openAcceptModal = (requestId: string) => {
     setAcceptingRequestId(requestId);
     setAcceptModalOpen(true);
@@ -312,7 +380,8 @@ export function ProfessionalDashboard() {
 
   const NAV_ITEMS = [
     { key: 'overview', icon: LayoutDashboard, label: 'Mi panel' },
-    { key: 'solicitudes', icon: Calendar, label: `Solicitudes (${pendingRequests.length})` },
+    { key: 'solicitudes', icon: Calendar, label: `Solicitudes recibidas (${pendingRequests.length})` },
+    { key: 'mis_reservas', icon: ShoppingBag, label: 'Mis reservas' },
     { key: 'servicios', icon: Briefcase, label: 'Mis servicios' },
     { key: 'disponibilidad', icon: Clock, label: 'Disponibilidad' },
     { key: 'perfil', icon: Settings, label: 'Editar perfil' },
@@ -368,6 +437,7 @@ export function ProfessionalDashboard() {
                       ? 'bg-[#EFF6FF] text-[#1E40AF] font-medium border-r-2 border-[#1E40AF]'
                       : 'text-[#374151] hover:bg-[#F9FAFB]'
                   }`}
+                  type="button"
                 >
                   <item.icon className="w-4 h-4" />
                   {item.label}
@@ -376,6 +446,7 @@ export function ProfessionalDashboard() {
               <button
                 onClick={async () => { await logout(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                type="button"
               >
                 <LogOut className="w-4 h-4" /> Cerrar sesión
               </button>
@@ -413,7 +484,7 @@ export function ProfessionalDashboard() {
                 <div className="bg-white rounded-2xl border border-[#E5E7EB]">
                   <div className="flex items-center justify-between px-5 py-4 border-b border-[#F3F4F6]">
                     <h2 className="font-bold text-[#111827]">Solicitudes recientes</h2>
-                    <button onClick={() => setView('solicitudes')} className="text-sm text-[#1E40AF] hover:underline flex items-center gap-1">
+                    <button onClick={() => setView('solicitudes')} className="text-sm text-[#1E40AF] hover:underline flex items-center gap-1" type="button">
                       Ver todas <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -464,13 +535,14 @@ export function ProfessionalDashboard() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'Gestionar servicios', desc: 'Añade o edita tus servicios', icon: Briefcase, action: () => setView('servicios'), color: '#1E40AF', bg: '#EFF6FF' },
                     { label: 'Disponibilidad', desc: 'Configura tu horario', icon: Clock, action: () => setView('disponibilidad'), color: '#10B981', bg: '#ECFDF5' },
+                    { label: 'Mis reservas', desc: 'Ver servicios que pediste', icon: ShoppingBag, action: () => setView('mis_reservas'), color: '#D97706', bg: '#FFFBEB' },
                     { label: 'Editar perfil', desc: 'Actualiza tu información', icon: Edit3, action: () => setView('perfil'), color: '#7C3AED', bg: '#F5F3FF' },
                   ].map((item, i) => (
-                    <button key={i} onClick={item.action} className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-[#E5E7EB] hover:shadow-md hover:-translate-y-0.5 transition-all text-left">
+                    <button key={i} onClick={item.action} className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-[#E5E7EB] hover:shadow-md hover:-translate-y-0.5 transition-all text-left" type="button">
                       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: item.bg }}>
                         <item.icon className="w-5 h-5" style={{ color: item.color }} />
                       </div>
@@ -574,6 +646,7 @@ export function ProfessionalDashboard() {
                                 onClick={() => openAcceptModal(req.id)}
                                 disabled={loading}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[#10B981] text-white rounded-xl text-sm font-semibold hover:bg-[#0EA875] transition-colors disabled:opacity-60"
+                                type="button"
                               >
                                 <CheckCircle2 className="w-4 h-4" /> Aceptar
                               </button>
@@ -581,6 +654,7 @@ export function ProfessionalDashboard() {
                                 onClick={() => handleReject(req.id)}
                                 disabled={loading}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-[#E5E7EB] text-[#EF4444] rounded-xl text-sm font-medium hover:bg-[#FEF2F2] transition-colors disabled:opacity-60"
+                                type="button"
                               >
                                 {loading ? (
                                   <div className="w-4 h-4 border-2 border-[#EF4444]/30 border-t-[#EF4444] rounded-full animate-spin" />
@@ -597,6 +671,7 @@ export function ProfessionalDashboard() {
                                 onClick={() => handleCancelReq(req.id)}
                                 disabled={loading}
                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 border border-[#E5E7EB] text-[#EF4444] rounded-xl text-sm font-medium hover:bg-[#FEF2F2] transition-colors disabled:opacity-60"
+                                type="button"
                               >
                                 {loading ? (
                                   <div className="w-4 h-4 border-2 border-[#EF4444]/30 border-t-[#EF4444] rounded-full animate-spin" />
@@ -614,6 +689,100 @@ export function ProfessionalDashboard() {
               </div>
             )}
 
+            {view === 'mis_reservas' && (
+              <div className="space-y-5">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <h1 className="text-2xl font-bold text-[#111827]">Mis reservas</h1>
+                    <p className="text-sm text-[#6B7280] mt-1">
+                      Servicios que tú has pedido a otros profesionales
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Link
+                      to="/buscar"
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#1E40AF] text-white text-sm font-medium hover:bg-[#1D3FA0] transition-colors"
+                    >
+                      <MapPin className="w-4 h-4" />
+                      Buscar profesionales
+                    </Link>
+                    <button
+                      onClick={loadMyBookings}
+                      disabled={myBookingsLoading}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl border border-[#E5E7EB] text-sm font-medium text-[#374151] hover:bg-[#F9FAFB] transition-colors disabled:opacity-60"
+                      type="button"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${myBookingsLoading ? 'animate-spin' : ''}`} />
+                      Actualizar
+                    </button>
+                  </div>
+                </div>
+
+                {myBookingsError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 whitespace-pre-line">
+                    {myBookingsError}
+                  </div>
+                )}
+
+                {/* Sección activas */}
+                <div className="bg-white rounded-2xl border border-[#E5E7EB]">
+                  <div className="px-5 py-4 border-b border-[#F3F4F6]">
+                    <h2 className="font-bold text-[#111827]">
+                      Activas <span className="text-sm font-normal text-[#9CA3AF]">({activeMyBookings.length})</span>
+                    </h2>
+                  </div>
+                  {myBookingsLoading ? (
+                    <div className="p-5 space-y-3">
+                      <div className="h-20 bg-[#F3F4F6] rounded-xl" />
+                      <div className="h-20 bg-[#F3F4F6] rounded-xl" />
+                    </div>
+                  ) : activeMyBookings.length === 0 ? (
+                    <div className="text-center py-10">
+                      <ShoppingBag className="w-10 h-10 text-[#D1D5DB] mx-auto mb-2" />
+                      <p className="text-[#6B7280] text-sm">No tienes reservas activas</p>
+                      <Link to="/buscar" className="text-sm text-[#1E40AF] hover:underline mt-1 inline-block">
+                        Buscar profesionales
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#F3F4F6]">
+                      {activeMyBookings.map(req => (
+                        <RequestCard
+                          key={req.id}
+                          req={req}
+                          onConfirm={handleConfirmMyBooking}
+                          onCancel={handleCancelMyBooking}
+                          actionLoadingId={bookingActionLoadingId}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Sección historial */}
+                {historyMyBookings.length > 0 && (
+                  <div className="bg-white rounded-2xl border border-[#E5E7EB]">
+                    <div className="px-5 py-4 border-b border-[#F3F4F6]">
+                      <h2 className="font-bold text-[#111827]">
+                        Historial <span className="text-sm font-normal text-[#9CA3AF]">({historyMyBookings.length})</span>
+                      </h2>
+                    </div>
+                    <div className="divide-y divide-[#F3F4F6]">
+                      {historyMyBookings.map(req => (
+                        <RequestCard
+                          key={req.id}
+                          req={req}
+                          onConfirm={handleConfirmMyBooking}
+                          onCancel={handleCancelMyBooking}
+                          actionLoadingId={bookingActionLoadingId}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {view === 'servicios' && (
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
@@ -621,6 +790,7 @@ export function ProfessionalDashboard() {
                   <button
                     onClick={openCreate}
                     className="flex items-center gap-2 px-4 py-2 bg-[#1E40AF] text-white rounded-xl text-sm font-semibold hover:bg-[#1D3FA0] transition-colors"
+                    type="button"
                   >
                     <Plus className="w-4 h-4" /> Añadir servicio
                   </button>

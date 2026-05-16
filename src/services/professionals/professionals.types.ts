@@ -13,7 +13,7 @@ export type UserProfileResponse = {
   phone: string;
   address?: string;
   age?: number;
-  profilePictureUrl?: string; 
+  profilePictureUrl?: string;
   roles: string[];
 };
 export interface CreateProfessionalProfileRequest {
@@ -64,21 +64,22 @@ export type CreateServiceRequest = {
   basePrice: number;
 };
 
-/** 3.3 Actualizar servicio*/
-
+/** 3.3 Actualizar servicio */
 export type UpdateServiceRequest = CreateServiceRequest;
 
 
 export interface ProfessionalPublicDTO {
-  id: string;                      
+  id: string;
   firstName: string;
   lastName: string;
   profilePictureUrl: string | null;
   professionName: string;
   categoryName: string;
   rating: number;
-  status: string;                  
-  accountStatus: string;            
+  status: string;
+  accountStatus: string;
+  lat: number;
+  lng: number;
   gold: boolean;
 }
 
@@ -86,8 +87,8 @@ export interface PageResponse<T> {
   content: T[];
   totalElements: number;
   totalPages: number;
-  number: number;       
-  size: number;         
+  number: number;
+  size: number;
   first: boolean;
   last: boolean;
   empty: boolean;
@@ -102,9 +103,9 @@ export interface ProfessionalDetailPublicDTO {
   professionName: string;
   categoryName: string;
   rating: number;
-  status: string;          
-  accountStatus: string;   
-  lat: number;             
-  lng: number;             
+  status: string;
+  accountStatus: string;
+  lat: number;
+  lng: number;
   gold: boolean;
 }

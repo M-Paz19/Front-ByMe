@@ -10,7 +10,6 @@ import { RealMap } from '../components/RealMap';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 import type {
   ProfessionalPublicDTO,
-  ProfessionalDetailPublicDTO,
 } from '../../services/professionals/professionals.types';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -64,19 +63,14 @@ interface DisplayProfessional {
   address?: string;
 }
 
-
-function buildDisplay(
-  base: ProfessionalPublicDTO,
-  detail: ProfessionalDetailPublicDTO | null,
-): DisplayProfessional {
+/**
+ * Mapea un profesional del backend al tipo que usa la UI.
+ *
+ * `lat` y `lng` vienen directo del endpoint paginado — ya no hay que
+ * hacer una petición extra por cada profesional para obtenerlos.
+ */
+function buildDisplay(base: ProfessionalPublicDTO): DisplayProfessional {
   const fullName = `${base.firstName} ${base.lastName}`.trim();
-
-  let realLat: number | undefined;
-  let realLng: number | undefined;
-  if (detail && typeof detail.lat === 'number' && typeof detail.lng === 'number') {
-    realLat = detail.lat;
-    realLng = detail.lng;
-  }
 
   return {
     id: base.id,
@@ -92,8 +86,8 @@ function buildDisplay(
     distance: '—',
     hourlyRate: 0,
     responseTime: 'Pronto',
-    lat: realLat,
-    lng: realLng,
+    lat: typeof base.lat === 'number' ? base.lat : undefined,
+    lng: typeof base.lng === 'number' ? base.lng : undefined,
   };
 }
 
@@ -141,33 +135,19 @@ export function SearchPage() {
     return () => { mounted = false; };
   }, []);
 
-  // Cargar lista paginada + coords reales en paralelo
+  // Cargar lista paginada. Una sola petición — lat/lng vienen incluidos.
   useEffect(() => {
     let mounted = true;
     setLoading(true);
     setError(null);
 
     ProfessionalsService.getPublicList(page, size)
-      .then(async (res) => {
+      .then((res) => {
         if (!mounted) return;
         const baseList = res.content || [];
-
+        setPros(baseList.map(buildDisplay));
         setTotalPages(res.totalPages || 0);
         setTotalElements(res.totalElements || 0);
-
-        // Mostrar primero la lista sin coords (rápido), luego completar con coords
-        setPros(baseList.map((p) => buildDisplay(p, null)));
-
-        // Cargar coords reales en paralelo (no bloquea la UI)
-        const detailPromises = baseList.map((p) =>
-          ProfessionalsService.getPublicById(p.id).catch(() => null)
-        );
-
-        const details = await Promise.all(detailPromises);
-        if (!mounted) return;
-
-        const enriched = baseList.map((p, i) => buildDisplay(p, details[i]));
-        setPros(enriched);
       })
       .catch((e) => {
         if (mounted) setError(e?.response?.data?.message || 'No se pudieron cargar los profesionales.');
@@ -201,19 +181,13 @@ export function SearchPage() {
 
   const reload = () => {
     setLoading(true);
-    setPros([]);
     ProfessionalsService.getPublicList(page, size)
-      .then(async (res) => {
+      .then((res) => {
         const baseList = res.content || [];
-        setPros(baseList.map((p) => buildDisplay(p, null)));
+        setPros(baseList.map(buildDisplay));
         setTotalPages(res.totalPages || 0);
         setTotalElements(res.totalElements || 0);
         setError(null);
-
-        const details = await Promise.all(
-          baseList.map((p) => ProfessionalsService.getPublicById(p.id).catch(() => null))
-        );
-        setPros(baseList.map((p, i) => buildDisplay(p, details[i])));
       })
       .catch((e) => setError(e?.response?.data?.message || 'No se pudieron cargar los profesionales.'))
       .finally(() => setLoading(false));
