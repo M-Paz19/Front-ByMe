@@ -17,7 +17,7 @@ import type { Workday, ServiceRequestDTO } from '../../services/requests/request
 const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-// Coordenadas por defecto (Popayán centro) — fallback si el profesional no las tiene
+
 const DEFAULT_LAT = 2.4419;
 const DEFAULT_LNG = -76.6065;
 
@@ -127,10 +127,8 @@ export function BookingPage() {
   const profPhoto = professional?.profilePictureUrl || (professional ? getFallbackPhoto(professional.id) : '');
   const profSpecialty = professional?.professionName || '';
   const profRating = professional?.rating || 0;
-
-  // Coordenadas del profesional — el backend los tiene invertidos:
-  const profLat = professional?.lng ?? DEFAULT_LAT;
-  const profLng = professional?.lat ?? DEFAULT_LNG;
+  const profLat = professional?.lat ?? DEFAULT_LAT;
+  const profLng = professional?.lng ?? DEFAULT_LNG;
 
   const daysInMonth = getDaysInMonth(viewYear, viewMonth);
   const firstDay = getFirstDayOfMonth(viewYear, viewMonth);

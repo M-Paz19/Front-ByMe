@@ -74,8 +74,8 @@ function buildDisplay(
   let realLat: number | undefined;
   let realLng: number | undefined;
   if (detail && typeof detail.lat === 'number' && typeof detail.lng === 'number') {
-    realLat = detail.lng; 
-    realLng = detail.lat; 
+    realLat = detail.lat;
+    realLng = detail.lng;
   }
 
   return {
