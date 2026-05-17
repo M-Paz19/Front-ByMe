@@ -15,6 +15,7 @@ import { ProfessionalsService } from '../../services/professionals/professionals
 import type { ProfessionName } from '../../services/professionals/professionals.types';
 import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/requests.types';
 import { GoogleMapPicker } from '../components/GoogleMapPicker';
+import { useProfessionalsCache } from '../hooks/useProfessionalsCache';
 
 type View = 'overview' | 'history';
 
@@ -241,6 +242,7 @@ export function UserDashboard() {
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestsError, setRequestsError] = useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const { professionalsById, hydrate: hydrateProfessionals } = useProfessionalsCache();
 
   const userId = user?.id;
 
@@ -261,6 +263,11 @@ export function UserDashboard() {
   useEffect(() => {
     void loadRequests();
   }, [userId]);
+
+  useEffect(() => {
+    if (requests.length === 0) return;
+    void hydrateProfessionals(requests.map(r => r.professionalId));
+  }, [requests, hydrateProfessionals]);
 
   const activeRequests = useMemo(
     () => requests.filter(r => ACTIVE_STATUSES.includes(r.status)),
@@ -497,6 +504,7 @@ export function UserDashboard() {
                           onConfirm={handleConfirm}
                           onCancel={handleCancel}
                           actionLoadingId={actionLoadingId}
+                          professionalsById={professionalsById} 
                         />
                       ))}
                     </div>
@@ -586,6 +594,7 @@ export function UserDashboard() {
                           onConfirm={handleConfirm}
                           onCancel={handleCancel}
                           actionLoadingId={actionLoadingId}
+                          professionalsById={professionalsById} 
                         />
                       ))}
                     </div>

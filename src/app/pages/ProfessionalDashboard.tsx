@@ -15,7 +15,9 @@ import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/r
 import { GoogleMapPicker } from '../components/GoogleMapPicker';
 import { ServiceModal } from '../components/modals/ServiceModal';
 import { AcceptModal } from '../components/modals/AcceptModal';
+import { useProfessionalsCache } from '../hooks/useProfessionalsCache';
 import { RequestCard } from '../components/RequestCard';
+
 
 type View = 'overview' | 'solicitudes' | 'mis_reservas' | 'servicios' | 'disponibilidad' | 'perfil';
 
@@ -72,7 +74,6 @@ export function ProfessionalDashboard() {
   const { logout, userName, userPhoto, user, updateProfile, authLoading, authError } = useApp();
   const prof = professionals[0];
 
-  // === Perfil — form controlado ===
   const [formFirstName, setFormFirstName] = useState('');
   const [formLastName, setFormLastName] = useState('');
   const [formPhone, setFormPhone] = useState('');
@@ -125,7 +126,6 @@ export function ProfessionalDashboard() {
   useEffect(() => {
     if (view !== 'servicios') return;
     void loadServices();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, professionalId]);
 
   const openCreate = () => {
@@ -208,11 +208,12 @@ export function ProfessionalDashboard() {
     [requests]
   );
 
-  // === Mis reservas (como cliente) — solicitudes que ESTE usuario hizo a otros profesionales ===
   const [myBookings, setMyBookings] = useState<ServiceRequestDTO[]>([]);
   const [myBookingsLoading, setMyBookingsLoading] = useState(false);
   const [myBookingsError, setMyBookingsError] = useState<string | null>(null);
   const [bookingActionLoadingId, setBookingActionLoadingId] = useState<string | null>(null);
+  const { professionalsById, hydrate: hydrateProfessionals } = useProfessionalsCache();
+
 
   const loadMyBookings = async () => {
     if (!userId) return;
@@ -231,8 +232,12 @@ export function ProfessionalDashboard() {
   useEffect(() => {
     if (view !== 'mis_reservas') return;
     void loadMyBookings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, userId]);
+
+  useEffect(() => {
+    if (myBookings.length === 0) return;
+    void hydrateProfessionals(myBookings.map(r => r.professionalId));
+  }, [myBookings, hydrateProfessionals]);
 
   const activeMyBookings = React.useMemo(
     () => myBookings.filter(r => ACTIVE_STATUSES.includes(r.status)),
@@ -753,6 +758,7 @@ export function ProfessionalDashboard() {
                           onConfirm={handleConfirmMyBooking}
                           onCancel={handleCancelMyBooking}
                           actionLoadingId={bookingActionLoadingId}
+                          professionalsById={professionalsById}
                         />
                       ))}
                     </div>
@@ -775,6 +781,7 @@ export function ProfessionalDashboard() {
                           onConfirm={handleConfirmMyBooking}
                           onCancel={handleCancelMyBooking}
                           actionLoadingId={bookingActionLoadingId}
+                          professionalsById={professionalsById}
                         />
                       ))}
                     </div>

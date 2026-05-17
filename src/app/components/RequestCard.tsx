@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Card que renderiza una solicitud de servicio.
  *
- * Se usa tanto en el UserDashboard como en el
+ * Se usa tanto en el UserDashboard (vista cliente) como en el
  * ProfessionalDashboard (cuando un profesional ve las reservas que ÉL hizo
  * como cliente a otros profesionales).
  *
@@ -12,6 +12,8 @@
  *   - onConfirm: callback cuando el usuario confirma (visible si status === 'ACEPTADA')
  *   - onCancel: callback cuando el usuario cancela (visible si status puede cancelarse)
  *   - actionLoadingId: id de la solicitud que está procesando una acción, para mostrar loading
+ *   - professionalsById: cache de profesionales conocidos { uuid -> { firstName, lastName } }
+ *     Si no se pasa, muestra el UUID truncado como fallback.
  *
  * Las acciones se muestran según el estado:
  *   - PENDIENTE          → Cancelar
@@ -20,9 +22,10 @@
  *   - EN_CAMINO/EN_PROCESO/COMPLETADA/RECHAZADA/CANCELADA → solo ver
  */
 import React from 'react';
+import { Link } from 'react-router';
 import {
   Calendar, Clock, MapPin, CheckCircle2, XCircle, AlertCircle,
-  Briefcase, Send, PlayCircle, Truck,
+  Briefcase, Send, PlayCircle, Truck, User,
 } from 'lucide-react';
 import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/requests.types';
 
@@ -48,14 +51,27 @@ function formatPrice(v: number | null | undefined): string {
   return `$${v.toLocaleString()}`;
 }
 
+export interface ProfessionalInfo {
+  firstName: string;
+  lastName: string;
+  profilePictureUrl?: string | null;
+}
+
 interface RequestCardProps {
   req: ServiceRequestDTO;
   onConfirm: (id: string) => void;
   onCancel: (id: string) => void;
   actionLoadingId: string | null;
+  professionalsById?: Record<string, ProfessionalInfo>;
 }
 
-export function RequestCard({ req, onConfirm, onCancel, actionLoadingId }: RequestCardProps) {
+export function RequestCard({
+  req,
+  onConfirm,
+  onCancel,
+  actionLoadingId,
+  professionalsById,
+}: RequestCardProps) {
   const status = STATUS_CONFIG[req.status];
   const StatusIcon = status.icon;
   const loading = actionLoadingId === req.id;
@@ -63,11 +79,21 @@ export function RequestCard({ req, onConfirm, onCancel, actionLoadingId }: Reque
   const canConfirm = req.status === 'ACEPTADA';
   const canCancel = ['PENDIENTE', 'ACEPTADA', 'CONFIRMADA'].includes(req.status);
 
+  // Resolver nombre del profesional desde el cache, o usar fallback al UUID truncado
+  const proInfo = professionalsById?.[req.professionalId];
+  const proName = proInfo
+    ? `${proInfo.firstName} ${proInfo.lastName}`.trim() || `${req.professionalId.slice(0, 8)}…`
+    : `${req.professionalId.slice(0, 8)}…`;
+
   return (
     <div className="p-5 flex flex-col gap-3">
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-xl bg-[#EFF6FF] flex items-center justify-center flex-shrink-0">
-          <Briefcase className="w-5 h-5 text-[#1E40AF]" />
+        <div className="w-12 h-12 rounded-xl bg-[#EFF6FF] flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {proInfo?.profilePictureUrl ? (
+            <img src={proInfo.profilePictureUrl} alt={proName} className="w-full h-full object-cover" />
+          ) : (
+            <Briefcase className="w-5 h-5 text-[#1E40AF]" />
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -75,8 +101,19 @@ export function RequestCard({ req, onConfirm, onCancel, actionLoadingId }: Reque
               <p className="font-semibold text-[#111827] truncate">
                 {req.serviceName || 'Servicio'}
               </p>
-              <p className="text-xs text-[#9CA3AF] mt-0.5">
-                Profesional: {req.professionalId.slice(0, 8)}…
+              <p className="text-xs text-[#9CA3AF] mt-0.5 flex items-center gap-1">
+                <User className="w-3 h-3" />
+                Profesional:{' '}
+                {proInfo ? (
+                  <Link
+                    to={`/profesional/${req.professionalId}`}
+                    className="text-[#1E40AF] hover:underline font-medium"
+                  >
+                    {proName}
+                  </Link>
+                ) : (
+                  <span>{proName}</span>
+                )}
               </p>
             </div>
             <span className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border font-medium ${status.color} ${status.bg} ${status.border} flex-shrink-0`}>
