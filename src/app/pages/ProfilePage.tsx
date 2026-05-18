@@ -1,7 +1,8 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router"; 
 import { ArrowLeft, Camera, Save, X } from "lucide-react";
-import { useApp } from "../context/AppContext"; 
+import { useApp } from "../context/AppContext";
+import UserAvatar from "../components/UserAvatar";
 import type { UpdateProfileRequest } from "../../services/auth/auth.types";
 
 type DemoRole = "visitor" | "usuario" | "profesional" | "admin";
@@ -268,16 +269,16 @@ export function ProfilePage() {
               <button
                 type="button"
                 onClick={openPhotoModal}
-                className="w-16 h-16 rounded-full bg-[#F3F4F6] border border-[#E5E7EB] flex items-center justify-center overflow-hidden hover:opacity-95 transition"
+                className="hover:opacity-95 transition"
                 aria-label="Cambiar foto"
               >
-                {shownPhoto ? (
-                  <img src={shownPhoto} alt="Foto de perfil" className="w-full h-full object-cover" />
-                ) : (
-                  <Camera className="w-6 h-6 text-[#9CA3AF]" />
-                )}
+                <UserAvatar
+                  src={shownPhoto}
+                  name={user ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() : null}
+                  className="w-16 h-16 rounded-full"
+                  initialsClassName="text-xl"
+                />
               </button>
-
               <div className="flex-1">
                 <button
                   type="button"

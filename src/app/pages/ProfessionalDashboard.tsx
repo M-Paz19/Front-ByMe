@@ -13,6 +13,7 @@ import { ServiceRequestsService } from '../../services/requests/requests.service
 import type { ServiceDetailDTO } from '../../services/professionals/professionals.types';
 import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/requests.types';
 import { GoogleMapPicker } from '../components/GoogleMapPicker';
+import UserAvatar from '../components/UserAvatar';
 import { ServiceModal } from '../components/modals/ServiceModal';
 import { AcceptModal } from '../components/modals/AcceptModal';
 import { useProfessionalsCache } from '../hooks/useProfessionalsCache';
@@ -419,8 +420,14 @@ export function ProfessionalDashboard() {
             <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 mb-4">
               <div className="flex flex-col items-center text-center">
                 <div className="relative mb-3">
-                  <img src={userPhoto || prof.photo} alt={userName || prof.name} className="w-16 h-16 rounded-2xl object-cover" />
-                  <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${prof.available ? 'bg-[#10B981]' : 'bg-[#9CA3AF]'}`} />
+                  <UserAvatar
+                    src={userPhoto}
+                    name={userName || prof.name}
+                    className="w-16 h-16 rounded-2xl"
+                    initialsClassName="text-xl"
+                    showOnlineIndicator
+                    isOnline={prof.available}
+                  />
                 </div>
                 <p className="font-bold text-[#111827] text-sm">{userName || prof.name}</p>
                 <p className="text-xs text-[#9CA3AF] mt-0.5">{prof.specialty}</p>
@@ -925,8 +932,13 @@ export function ProfessionalDashboard() {
                 <h1 className="text-2xl font-bold text-[#111827]">Editar perfil profesional</h1>
                 <div className="bg-white rounded-2xl border border-[#E5E7EB] p-6">
                   <div className="flex items-center gap-4 mb-6 pb-6 border-b border-[#F3F4F6]">
-                    <div className="relative">
-                      <img src={userPhoto || prof.photo} alt={userName || prof.name} className="w-20 h-20 rounded-2xl object-cover" />
+                    <div className="flex items-center gap-4 mb-6 pb-6 border-b border-[#F3F4F6]">
+                      <UserAvatar
+                        src={userPhoto}
+                        name={userName || prof.name}
+                        className="w-20 h-20 rounded-2xl"
+                        initialsClassName="text-2xl"
+                      />
                     </div>
                     <div>
                       <p className="text-sm font-medium text-[#111827]">Foto de perfil</p>

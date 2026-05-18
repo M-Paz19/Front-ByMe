@@ -5,22 +5,14 @@ import {
   ChevronLeft, Calendar, Share2, Heart, MessageSquare, Briefcase,
   ChevronRight, AlertCircle, Layers
 } from 'lucide-react';
-import { IMGS } from '../data/mockData';
 import { StarRating } from '../components/StarRating';
+import UserAvatar from '../components/UserAvatar';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 import type {
   ServiceDetailDTO,
   ProfessionalDetailPublicDTO,
   ProfessionalPublicDTO,
 } from '../../services/professionals/professionals.types';
-
-const FALLBACK_PHOTOS = [IMGS.man1, IMGS.man2, IMGS.woman1].filter(Boolean);
-function getFallbackPhoto(id: string): string {
-  if (FALLBACK_PHOTOS.length === 0) return '';
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i)) % FALLBACK_PHOTOS.length;
-  return FALLBACK_PHOTOS[hash];
-}
 
 function getApiMsg(err: any): string {
   const data = err?.response?.data;
@@ -125,7 +117,7 @@ export function ProfessionalProfile() {
   }
 
   const profName = professional ? `${professional.firstName} ${professional.lastName}`.trim() : '';
-  const profPhoto = professional ? (professional.profilePictureUrl || getFallbackPhoto(professional.id)) : '';
+  const profPhoto = professional?.profilePictureUrl ?? null;
   const profSpecialty = professional?.professionName || '';
   const profCategory = professional?.categoryName || '';
   const profRating = professional?.rating || 0;
@@ -190,13 +182,14 @@ export function ProfessionalProfile() {
             <>
               {/* Foto (sale por arriba) */}
               <div className="relative w-fit -mt-16 sm:-mt-20">
-                <img
+                <UserAvatar
                   src={profPhoto}
-                  alt={profName}
-                  className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl object-cover border-4 border-white shadow-xl"
+                  name={profName}
+                  className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl border-4 border-white shadow-xl"
+                  initialsClassName="text-4xl"
                 />
                 <div className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-white ${profIsAvailable ? 'bg-[#10B981]' : 'bg-[#9CA3AF]'}`} />
-              </div>
+                </div>
 
               {/* Nombre + badges + meta + botón en una fila */}
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mt-4">
@@ -424,14 +417,18 @@ export function ProfessionalProfile() {
                   <div className="space-y-3">
                     {similar.map(p => {
                       const fullName = `${p.firstName} ${p.lastName}`.trim();
-                      const photo = p.profilePictureUrl || getFallbackPhoto(p.id);
                       return (
                         <Link
                           key={p.id}
                           to={`/profesional/${p.id}`}
                           className="flex items-center gap-3 hover:bg-[#F9FAFB] p-2 rounded-lg transition-colors -mx-2"
                         >
-                          <img src={photo} alt={fullName} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+                          <UserAvatar
+                            src={p.profilePictureUrl}
+                            name={fullName}
+                            className="w-10 h-10 rounded-xl flex-shrink-0"
+                            initialsClassName="text-xs"
+                          />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-[#111827] truncate">{fullName}</p>
                             <p className="text-xs text-[#9CA3AF] truncate">{p.professionName}</p>

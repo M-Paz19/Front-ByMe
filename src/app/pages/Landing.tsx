@@ -8,6 +8,7 @@ import {
 import { categories as mockCategories, professionals as mockProfessionals, IMGS } from '../data/mockData';
 import { ProfessionalsService } from '../../services/professionals/professionals.service';
 import type { ProfessionalPublicDTO } from '../../services/professionals/professionals.types';
+import UserAvatar from '../components/UserAvatar';
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck, Bug,
@@ -39,10 +40,10 @@ function getFallbackPhoto(id: string): string {
 }
 
 const STATS = [
-  { value: '500+', label: 'Profesionales activos', icon: Briefcase },
-  { value: '4,800+', label: 'Servicios completados', icon: CheckCircle2 },
-  { value: '4.8', label: 'Calificación promedio', icon: Star },
-  { value: '12+', label: 'Categorías disponibles', icon: Award },
+  { value: 'Geolocalización', label: 'Búsqueda inteligente de servicios', icon: Briefcase },
+  { value: 'Agenda digital', label: 'Gestión de citas integrada', icon: CheckCircle2 },
+  { value: 'Sistema de reseñas', label: 'Experiencia basada en confianza', icon: Star },
+  { value: 'Marketplace flexible', label: 'Diversidad de servicios disponibles', icon: Award },
 ];
 
 const HOW_IT_WORKS = [
@@ -362,10 +363,11 @@ export function Landing() {
                     </div>
 
                     <div className="flex justify-center -mt-9 relative z-10 mb-3">
-                      <img
+                      <UserAvatar
                         src={photo}
-                        alt={fullName}
-                        className="w-[72px] h-[72px] rounded-xl object-cover border-4 border-white shadow-lg"
+                        name={fullName}
+                        className="w-[72px] h-[72px] rounded-xl border-4 border-white shadow-lg"
+                        initialsClassName="text-2xl"
                       />
                     </div>
 
@@ -431,10 +433,11 @@ export function Landing() {
                   </div>
 
                   <div className="flex justify-center -mt-9 relative z-10 mb-3">
-                    <img
+                    <UserAvatar
                       src={prof.photo}
-                      alt={prof.name}
-                      className="w-[72px] h-[72px] rounded-xl object-cover border-4 border-white shadow-lg"
+                      name={prof.name}
+                      className="w-[72px] h-[72px] rounded-xl border-4 border-white shadow-lg"
+                      initialsClassName="text-2xl"
                     />
                   </div>
 
@@ -540,8 +543,8 @@ export function Landing() {
                     <CheckCircle2 className="w-5 h-5 text-[#10B981]" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-[#111827]">+4,800 trabajos</p>
-                    <p className="text-xs text-[#6B7280]">completados este año</p>
+                    <p className="text-sm font-bold text-[#111827]">Marketplace escalable</p>
+                    <p className="text-xs text-[#6B7280]">Preparado para múltiples profesionales y servicios</p>
                   </div>
                 </div>
               </div>

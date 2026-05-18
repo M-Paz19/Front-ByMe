@@ -11,7 +11,7 @@ import { ProfessionalsService } from '../../services/professionals/professionals
 import type {
   ProfessionalPublicDTO,
 } from '../../services/professionals/professionals.types';
-
+import UserAvatar from '../components/UserAvatar';
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
   Droplets, Zap, Paintbrush2, Hammer, Sparkles, KeyRound, Leaf, Wind, Truck, Bug,
 };
@@ -401,10 +401,11 @@ export function SearchPage() {
                         {index + 1}
                       </div>
 
-                      <img
+                      <UserAvatar
                         src={prof.photo}
-                        alt={prof.name}
-                        className="w-14 h-14 rounded-xl object-cover flex-shrink-0"
+                        name={prof.name}
+                        className="w-14 h-14 rounded-xl flex-shrink-0"
+                        initialsClassName="text-lg"
                       />
 
                       <div className="flex-1 min-w-0">
@@ -495,7 +496,12 @@ export function SearchPage() {
           {selectedPro && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-80 bg-white rounded-2xl shadow-2xl border border-[#E5E7EB] p-4 z-20">
               <div className="flex items-start gap-3">
-                <img src={selectedPro.photo} alt={selectedPro.name} className="w-12 h-12 rounded-xl object-cover" />
+                <UserAvatar
+                  src={selectedPro.photo}
+                  name={selectedPro.name}
+                  className="w-12 h-12 rounded-xl"
+                  initialsClassName="text-base"
+                />
                 <div className="flex-1">
                   <div className="flex items-start justify-between">
                     <div>

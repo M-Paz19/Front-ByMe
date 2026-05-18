@@ -6,7 +6,6 @@ import {
   Shield, Camera, LogOut, LayoutDashboard, History, Settings,
   Briefcase, Search, Sparkles, X, Send, PlayCircle, Truck, RefreshCw
 } from 'lucide-react';
-import { IMGS } from '../data/mockData';
 import { ServiceRequestsService } from '../../services/requests/requests.service';
 import { RequestCard } from '../components/RequestCard';
 import { StarRating } from '../components/StarRating';
@@ -15,6 +14,7 @@ import { ProfessionalsService } from '../../services/professionals/professionals
 import type { ProfessionName } from '../../services/professionals/professionals.types';
 import type { ServiceRequestDTO, RequestStatus } from '../../services/requests/requests.types';
 import { GoogleMapPicker } from '../components/GoogleMapPicker';
+import UserAvatar from '../components/UserAvatar';
 import { useProfessionalsCache } from '../hooks/useProfessionalsCache';
 
 type View = 'overview' | 'history';
@@ -382,7 +382,12 @@ export function UserDashboard() {
             <div className="bg-white rounded-2xl border border-[#E5E7EB] p-5 mb-4">
               <div className="flex flex-col items-center text-center">
                 <div className="relative mb-3">
-                  <img src={userPhoto || IMGS.man2} alt={userName} className="w-16 h-16 rounded-2xl object-cover" />
+                  <UserAvatar
+                    src={userPhoto}
+                    name={userName}
+                    className="w-16 h-16 rounded-2xl"
+                    initialsClassName="text-xl"
+                  />
                   <button
                     onClick={() => navigate('/perfil')}
                     className="absolute -bottom-1 -right-1 w-6 h-6 bg-[#1E40AF] rounded-full flex items-center justify-center"

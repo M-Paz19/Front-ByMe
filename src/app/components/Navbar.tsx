@@ -5,6 +5,7 @@ import {
   Bell, Search
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import UserAvatar from './UserAvatar';
 
 export function Navbar() {
   const { role, userName, userPhoto, isLoggedIn, logout } = useApp();
@@ -113,11 +114,12 @@ export function Navbar() {
                       isTransparent ? 'border-white/30 hover:bg-white/10' : 'border-[#E5E7EB] hover:bg-[#F9FAFB]'
                     }`}
                   >
-                    <img
-                      src={userPhoto}
-                      alt={userName}
-                      className="w-7 h-7 rounded-full object-cover"
-                    />
+                    <UserAvatar
+                    src={userPhoto}
+                    name={userName}
+                    className="w-7 h-7 rounded-full"
+                    initialsClassName="text-[10px]"
+                  />
                     <span className={`text-sm font-medium max-w-28 truncate ${isTransparent ? 'text-white' : 'text-[#111827]'}`}>
                       {userName.split(' ')[0]}
                     </span>
@@ -193,7 +195,12 @@ export function Navbar() {
           {isLoggedIn ? (
             <div className="pt-2 border-t border-[#E5E7EB] mt-2 space-y-1">
               <div className="flex items-center gap-3 px-3 py-2">
-                <img src={userPhoto} alt={userName} className="w-8 h-8 rounded-full object-cover" />
+                <UserAvatar
+                  src={userPhoto}
+                  name={userName}
+                  className="w-8 h-8 rounded-full"
+                  initialsClassName="text-[10px]"
+                />
                 <div>
                   <p className="text-sm font-semibold text-[#111827]">{userName}</p>
                   <p className="text-xs text-[#9CA3AF] capitalize">{role}</p>
